@@ -53,12 +53,24 @@ pub struct WindowConfig {
     pub width: f64,
     #[serde(default = "default_window_height")]
     pub height: f64,
+    #[serde(default = "default_window_min_width")]
+    pub min_width: f64,
+    #[serde(default = "default_window_min_height")]
+    pub min_height: f64,
+    #[serde(default = "default_window_max_width")]
+    pub max_width: f64,
+    #[serde(default = "default_window_max_height")]
+    pub max_height: f64,
 }
 
 fn default_window_x() -> f64 { -1.0 }
 fn default_window_y() -> f64 { -1.0 }
 fn default_window_width() -> f64 { 400.0 }
-fn default_window_height() -> f64 { 150.0 }
+fn default_window_height() -> f64 { 250.0 }
+fn default_window_min_width() -> f64 { 400.0 }
+fn default_window_min_height() -> f64 { 250.0 }
+fn default_window_max_width() -> f64 { 800.0 }
+fn default_window_max_height() -> f64 { 800.0 }
 
 impl Default for WindowConfig {
     fn default() -> Self {
@@ -66,7 +78,11 @@ impl Default for WindowConfig {
             x: -1.0,
             y: -1.0,
             width: 400.0,
-            height: 150.0,
+            height: 250.0,
+            min_width: 400.0,
+            min_height: 250.0,
+            max_width: 800.0,
+            max_height: 800.0,
         }
     }
 }
@@ -83,6 +99,8 @@ pub struct Config {
     pub endpoint: String,
     #[serde(default)]
     pub api_key: String,
+    #[serde(default)]
+    pub headers: String,
     #[serde(default = "default_port")]
     pub port: u16,
     #[serde(default)]
@@ -95,34 +113,77 @@ pub struct Config {
     pub idle_timeout: u64,
     #[serde(default = "default_suggestion_count")]
     pub suggestion_count: usize,
+    #[serde(default = "default_ai_suggestion_count")]
+    pub ai_suggestion_count: usize,
+    #[serde(default = "default_ai_suggestion_delay")]
+    pub ai_suggestion_delay: u64,
+    // Capture
+    #[serde(default = "default_poll_interval_ms")]
+    pub poll_interval_ms: u64,
+    #[serde(default = "default_debounce_ms")]
+    pub debounce_ms: u64,
+    #[serde(default = "default_min_word_len")]
+    pub min_word_len: usize,
+    #[serde(default = "default_max_added_chars")]
+    pub max_added_chars: usize,
+    // AI
+    #[serde(default = "default_request_timeout_secs")]
+    pub request_timeout_secs: u64,
+    // UI
+    #[serde(default = "default_resize_debounce_ms")]
+    pub resize_debounce_ms: u64,
+    #[serde(default = "default_hover_timeout_secs")]
+    pub hover_timeout_secs: u64,
 }
 
-fn default_port() -> u16 {
-    8080
-}
+fn default_port() -> u16 { 8080 }
 
-fn default_idle_timeout() -> u64 {
-    4
-}
+fn default_idle_timeout() -> u64 { 6 }
 
-fn default_suggestion_count() -> usize {
-    6
-}
+fn default_suggestion_count() -> usize { 6 }
+
+fn default_ai_suggestion_count() -> usize { 3 }
+
+fn default_ai_suggestion_delay() -> u64 { 800 }
+
+fn default_poll_interval_ms() -> u64 { 100 }
+
+fn default_debounce_ms() -> u64 { 300 }
+
+fn default_min_word_len() -> usize { 1 }
+
+fn default_max_added_chars() -> usize { 5 }
+
+fn default_request_timeout_secs() -> u64 { 30 }
+
+fn default_resize_debounce_ms() -> u64 { 250 }
+
+fn default_hover_timeout_secs() -> u64 { 30 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             provider: "local".into(),
-            model: "Qwen3-0.6B-Q4_K_M.gguf".into(),
+            model: "Qwen3-0.6B-Q8_0.gguf".into(),
             model_url: String::new(),
             endpoint: "http://127.0.0.1:8080".into(),
             api_key: String::new(),
+            headers: String::new(),
             port: 8080,
             dictionary: DictionaryConfig::default(),
             translation: TranslationConfig::default(),
             window: WindowConfig::default(),
-            idle_timeout: 4,
+            idle_timeout: 6,
             suggestion_count: 6,
+            ai_suggestion_count: 3,
+            ai_suggestion_delay: 800,
+            poll_interval_ms: 100,
+            debounce_ms: 300,
+            min_word_len: 1,
+            max_added_chars: 5,
+            request_timeout_secs: 30,
+            resize_debounce_ms: 250,
+            hover_timeout_secs: 30,
         }
     }
 }
@@ -161,6 +222,14 @@ pub fn load() -> Config {
 }
 
 pub fn save_window(x: f64, y: f64, width: f64, height: f64) {
+    let cfg = Config::default();
+    // Clamp to sane bounds — Tauri can report wrapped u32 values (near u32::MAX)
+    // when the window is minimized or in a transitional state, which overflows tao.
+    let x = x.clamp(-10_000.0, 10_000.0);
+    let y = y.clamp(-10_000.0, 10_000.0);
+    let width = width.clamp(cfg.window.min_width, cfg.window.max_width);
+    let height = height.clamp(cfg.window.min_height, cfg.window.max_height);
+
     let path = config_path();
 
     // Read existing file as raw JSON value to preserve unknown fields

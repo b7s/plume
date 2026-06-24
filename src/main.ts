@@ -8,12 +8,15 @@ interface SuggestionPayload {
   translation?: string;
   word: string;
   full_text: string;
+  ai_words?: string[];
+  window_title?: string;
 }
 
 interface PlaceholderPayload {
   corrections: string[];
   word: string;
   full_text: string;
+  window_title?: string;
 }
 
 const TRANSLATION_LANGS: [string, string][] = [
@@ -35,51 +38,60 @@ const root = document.getElementById("root")!;
 
 function render() {
   root.innerHTML = `
-    <div class="card hidden" id="overlay">
+    <div class="card" id="overlay">
       <div class="word-row" id="word-row">
-        <span id="word-label">WORD</span>
         <span id="word-display"></span>
         <button id="settings-btn" class="settings-btn" title="Settings">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M8 10.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z"/><path d="M13.5 8a5.5 5.5 0 0 0-.1-1l1.4-1.1-1.5-2.6-1.7.7a5.3 5.3 0 0 0-1.7-1l-.3-1.8h-3l-.3 1.8a5.3 5.3 0 0 0-1.7 1l-1.7-.7L1.4 5.9 2.8 7a5.5 5.5 0 0 0 0 2l-1.4 1.1 1.5 2.6 1.7-.7a5.3 5.3 0 0 0 1.7 1l.3 1.8h3l.3-1.8a5.3 5.3 0 0 0 1.7-1l1.7.7 1.5-2.6-1.4-1.1a5.5 5.5 0 0 0 .1-1z"/></svg>
         </button>
       </div>
       <div class="chips-row" id="chips"></div>
+      <span id="ai-loading" class="ai-loading hidden">✨</span>
       <div class="tr-section hidden" id="tr-section">
         <div class="divider" id="divider"></div>
         <textarea id="tr-text" class="tr-text" placeholder="Type or auto-captured text will appear here…" rows="2"></textarea>
         <div class="tr-toolbar" id="tr-toolbar">
-          <select id="tr-action" class="tr-action" title="AI action">
-            <option value="">Action…</option>
-            <option value="summarize">Summarize</option>
-            <option value="shorter">Make shorter</option>
-            <option value="longer">Make longer</option>
-            <optgroup label="Change tone">
-              <option value="tone:formal">Formal</option>
-              <option value="tone:casual">Casual</option>
-              <option value="tone:inspirational">Inspirational</option>
-              <option value="tone:humor">Humor</option>
-              <option value="tone:sarcastic">Sarcastic</option>
-            </optgroup>
-            <optgroup label="Format">
-              <option value="format:paragraph">Paragraph</option>
-              <option value="format:list">List</option>
-              <option value="format:business">Business</option>
-              <option value="format:academic">Academic</option>
-              <option value="format:marketing">Marketing</option>
-              <option value="format:poetry">Poetry</option>
-            </optgroup>
-          </select>
-          <button id="tr-action-btn" class="tr-btn" title="Execute action">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M8 2v8M5 7l3 3 3-3M3 14h10"/></svg>
-          </button>
-          <select id="tr-lang" class="tr-lang" title="Translate to"></select>
-          <button id="tr-btn" class="tr-btn" title="Translate">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M2 4h7M5 2v2M7.5 4S7 7 4 9.5M4.5 7c-.5 1.5-1.8 2.7-3 3.2M14 13c0-2-1.5-4.5-4-4.5S6 11 6 13s1.5 4.5 4 4.5 4-2.5 4-4.5z"/></svg>
-          </button>
+          <div class="tr-col">
+            <select id="tr-action" class="tr-action" title="AI action">
+              <option value="">Action…</option>
+              <option value="summarize">Summarize</option>
+              <option value="shorter">Make shorter</option>
+              <option value="longer">Make longer</option>
+              <option value="grammar">Correct grammar</option>
+               <option value="makesense">Make sense</option>
+              <optgroup label="Change tone">
+                <option value="tone:formal">Formal</option>
+                <option value="tone:casual">Casual</option>
+                <option value="tone:inspirational">Inspirational</option>
+                <option value="tone:humor">Humor</option>
+                <option value="tone:sarcastic">Sarcastic</option>
+              </optgroup>
+              <optgroup label="Format">
+                <option value="format:paragraph">Paragraph</option>
+                <option value="format:list">List</option>
+                <option value="format:business">Business</option>
+                <option value="format:academic">Academic</option>
+                <option value="format:marketing">Marketing</option>
+                <option value="format:poetry">Poetry</option>
+              </optgroup>
+            </select>
+            <button id="tr-action-btn" class="tr-btn" title="Execute action">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M2 8h10M9 5l3 3-3 3"/></svg>
+            </button>
+          </div>
+          <div class="tr-col tr-col-right">
+            <select id="tr-lang" class="tr-lang" title="Translate to"></select>
+            <button id="tr-btn" class="tr-btn" title="Translate">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M2 4h7M5 2v2M7.5 4S7 7 4 9.5M4.5 7c-.5 1.5-1.8 2.7-3 3.2M14 13c0-2-1.5-4.5-4-4.5S6 11 6 13s1.5 4.5 4 4.5 4-2.5 4-4.5z"/></svg>
+            </button>
+          </div>
         </div>
         <div class="tr-result-wrap hidden" id="tr-result-wrap">
           <button id="tr-copy" class="tr-copy" title="Copy translation">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" width="12" height="12"><rect x="2.5" y="3" width="11" height="11" rx="1.5"/><path d="M5.5 3v-1a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1"/></svg>
+          </button>
+          <button id="tr-insert" class="tr-copy" title="Insert text">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="12" height="12"><path d="M2 8h9M8 5l3 3-3 3"/><path d="M14 2v12"/></svg>
           </button>
           <div class="tr-result" id="tr-result"></div>
         </div>
@@ -100,9 +112,11 @@ const trText = document.getElementById("tr-text") as HTMLTextAreaElement;
 const trResult = document.getElementById("tr-result")!;
 const trResultWrap = document.getElementById("tr-result-wrap")!;
 const trCopy = document.getElementById("tr-copy") as HTMLButtonElement;
+const trInsert = document.getElementById("tr-insert") as HTMLButtonElement;
 const settingsBtn = document.getElementById("settings-btn") as HTMLButtonElement;
 const trAction = document.getElementById("tr-action") as HTMLSelectElement;
 const trActionBtn = document.getElementById("tr-action-btn") as HTMLButtonElement;
+const aiLoading = document.getElementById("ai-loading")!;
 
 // Populate language select
 for (const [code, name] of TRANSLATION_LANGS) {
@@ -112,8 +126,7 @@ for (const [code, name] of TRANSLATION_LANGS) {
   trLang.appendChild(opt);
 }
 
-const FADE_MS = 300;
-let IDLE_MS = 4_000;
+let IDLE_MS = 6_000;
 
 const win = getCurrentWindow();
 
@@ -121,9 +134,19 @@ let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let isVisible = false;
 let isHovering = false;
 let userEditedText = false;
-let baseHeight = 150;
-let baseWidth = 400;
-void baseWidth;
+let initialized = false;
+
+// Config-driven values (loaded from get_config on startup)
+let MIN_HEIGHT = 250;
+let MAX_HEIGHT = 800;
+let MIN_WIDTH = 400;
+let MAX_WIDTH = 800;
+let RESIZE_DEBOUNCE_MS = 250;
+let HOVER_TIMEOUT_MS = 30_000;
+
+// AI next-word suggestions
+let aiSuggestionTimer: ReturnType<typeof setTimeout> | null = null;
+let aiSuggestionDelay = 800;
 
 document.body.addEventListener("mouseenter", () => {
   isHovering = true;
@@ -152,36 +175,41 @@ function autoResize() {
   }
   resizeTimer = setTimeout(() => {
     const contentHeight = overlay.scrollHeight;
-    const targetHeight = Math.max(baseHeight, contentHeight);
+    const targetHeight = Math.min(Math.max(MIN_HEIGHT, contentHeight), MAX_HEIGHT);
     if (targetHeight === lastTargetHeight) {
       return;
     }
-    win.outerSize().then((size) => {
-      if (Math.abs(targetHeight - size.height) <= 10) {
-        return;
-      }
-      lastTargetHeight = targetHeight;
-      win.outerPosition().then((pos) => {
-        const delta = targetHeight - size.height;
-        win.setSize(new LogicalSize(size.width, targetHeight));
-        if (delta !== 0) {
-          win.setPosition(new LogicalPosition(pos.x, pos.y - delta));
+    win.scaleFactor().then((scale) => {
+      win.outerSize().then((size) => {
+        const logicalH = size.height / scale;
+        if (Math.abs(targetHeight - logicalH) <= 10) {
+          return;
         }
+        lastTargetHeight = targetHeight;
+        const logicalW = Math.min(Math.max(size.width / scale, MIN_WIDTH), MAX_WIDTH);
+        win.outerPosition().then((pos) => {
+          const logicalX = pos.x / scale;
+          const logicalY = pos.y / scale;
+          const delta = targetHeight - logicalH;
+          win.setSize(new LogicalSize(logicalW, targetHeight));
+          if (delta !== 0) {
+            win.setPosition(new LogicalPosition(logicalX, logicalY - delta));
+          }
+        });
       });
     }).catch(() => {});
-  }, 150);
+  }, RESIZE_DEBOUNCE_MS);
 }
 
 function showOverlay() {
   if (idleTimer) {
     clearTimeout(idleTimer);
+    idleTimer = null;
   }
-  overlay.classList.remove("fading");
   if (!isVisible) {
     isVisible = true;
     win.show().catch(() => {});
   }
-  overlay.classList.remove("hidden");
   scheduleHide();
 }
 
@@ -189,15 +217,10 @@ function scheduleHide() {
   if (idleTimer) {
     clearTimeout(idleTimer);
   }
-  const timeout = isHovering ? 30_000 : IDLE_MS;
+  const timeout = isHovering ? HOVER_TIMEOUT_MS : IDLE_MS;
   idleTimer = setTimeout(() => {
-    overlay.classList.add("fading");
-    setTimeout(() => {
-      overlay.classList.add("hidden");
-      overlay.classList.remove("fading");
-      isVisible = false;
-      win.hide().catch(() => {});
-    }, FADE_MS);
+    isVisible = false;
+    win.hide().catch(() => {});
   }, timeout);
 }
 
@@ -206,19 +229,17 @@ function hideOverlay() {
     clearTimeout(idleTimer);
     idleTimer = null;
   }
-  overlay.classList.add("hidden");
-  overlay.classList.remove("fading");
   isVisible = false;
   win.hide().catch(() => {});
 }
 
-function showWord(word: string) {
-  wordDisplay.textContent = word;
+function showWord(title: string) {
+  wordDisplay.textContent = title;
 }
 
-function showLoading(word: string) {
+function showLoading(title: string) {
   wordDisplay.style.opacity = "1";
-  showWord(word);
+  showWord(title);
   chipsContainer.innerHTML = "";
   const count = 6;
   for (let i = 0; i < count; i++) {
@@ -231,14 +252,17 @@ function showLoading(word: string) {
   showOverlay();
 }
 
-function makeChip(word: string, index: number): HTMLElement {
+function makeChip(word: string, index: number, isAi = false): HTMLElement {
   const wrap = document.createElement("span");
-  wrap.className = "chip-wrap animate-slide-up";
+  wrap.className = "chip-wrap animate-slide-up" + (isAi ? " chip-ai" : "");
   wrap.style.animationDelay = `${index * 40}ms`;
 
   const btn = document.createElement("button");
   btn.className = "chip-word";
   btn.textContent = word;
+  if (isAi) {
+    btn.title = "AI suggestion";
+  }
   btn.onclick = () => {
     invoke("accept_text", { text: word }).catch(console.error);
     hideOverlay();
@@ -270,7 +294,7 @@ function makeChip(word: string, index: number): HTMLElement {
 }
 
 function showSuggestions(data: SuggestionPayload) {
-  showWord(data.word);
+  showWord(data.window_title || data.word);
   chipsContainer.innerHTML = "";
   data.corrections.forEach((word, i) => {
     if (word) {
@@ -283,13 +307,55 @@ function showSuggestions(data: SuggestionPayload) {
     autoResize();
   }
 
+  // Schedule AI next-word suggestions after typing stops
+  scheduleAiSuggestions(data.full_text);
+
   showOverlay();
+}
+
+function scheduleAiSuggestions(text: string) {
+  if (aiSuggestionTimer) {
+    clearTimeout(aiSuggestionTimer);
+  }
+  if (!text || text.trim().length < 2) {
+    aiLoading.classList.add("hidden");
+    return;
+  }
+  aiLoading.classList.remove("hidden");
+  aiSuggestionTimer = setTimeout(() => {
+    invoke<string[]>("suggest_next_words", { text })
+      .then((words) => {
+        aiLoading.classList.add("hidden");
+        if (words && words.length > 0) {
+          appendAiChips(words);
+        }
+      })
+      .catch((e) => {
+        aiLoading.classList.add("hidden");
+        console.error("suggest_next_words failed:", e);
+      });
+  }, aiSuggestionDelay);
+}
+
+function appendAiChips(words: string[]) {
+  // Remove existing AI chips
+  chipsContainer.querySelectorAll(".chip-ai").forEach((el) => el.remove());
+
+  const existingCount = chipsContainer.children.length;
+  words.forEach((word, i) => {
+    if (word) {
+      chipsContainer.appendChild(makeChip(word, existingCount + i, true));
+    }
+  });
+  autoResize();
 }
 
 function showResult(text: string) {
   trResult.textContent = text;
   trResultWrap.classList.remove("hidden");
-  trCopy.style.display = text && !text.startsWith("Error") ? "" : "none";
+  const hasText = text && !text.startsWith("Error");
+  trCopy.style.display = hasText ? "" : "none";
+  trInsert.style.display = hasText ? "" : "none";
   autoResize();
 }
 
@@ -301,6 +367,7 @@ async function runLLM(
   trResult.textContent = loadingText;
   trResultWrap.classList.remove("hidden");
   trCopy.style.display = "none";
+  trInsert.style.display = "none";
   autoResize();
 
   try {
@@ -350,36 +417,52 @@ trCopy.onclick = (e) => {
   }, 1200);
 };
 
+// Insert translation result into the focused app
+trInsert.onclick = (e) => {
+  e.stopPropagation();
+  const text = trResult.textContent;
+  if (!text) return;
+  invoke("accept_text", { text }).catch(console.error);
+  hideOverlay();
+};
+
 // Settings — opens independent window
 settingsBtn.onclick = (e) => {
   e.stopPropagation();
-  invoke("open_settings").catch(console.error);
+  invoke("open_settings").catch((err) => console.error("open_settings failed:", err));
 };
 
 // Save window geometry on move/resize
+// Tauri event payloads are in physical pixels — convert to logical for storage
 win.onMoved(({ payload: pos }) => {
+  if (!initialized) return;
   win.outerSize().then((size) => {
-    invoke("save_window_position", {
-      x: pos.x,
-      y: pos.y,
-      width: size.width,
-      height: size.height,
+    win.scaleFactor().then((scale) => {
+      invoke("save_window_position", {
+        x: pos.x / scale,
+        y: pos.y / scale,
+        width: size.width / scale,
+        height: size.height / scale,
+      }).catch(() => {});
     }).catch(() => {});
   });
 });
 win.onResized(({ payload: size }) => {
+  if (!initialized) return;
   win.outerPosition().then((pos) => {
-    invoke("save_window_position", {
-      x: pos.x,
-      y: pos.y,
-      width: size.width,
-      height: size.height,
+    win.scaleFactor().then((scale) => {
+      invoke("save_window_position", {
+        x: pos.x / scale,
+        y: pos.y / scale,
+        width: size.width / scale,
+        height: size.height / scale,
+      }).catch(() => {});
     }).catch(() => {});
   });
 });
 
 listen<PlaceholderPayload>("plume:show", (evt) => {
-  showLoading(evt.payload.word);
+  showLoading(evt.payload.window_title || evt.payload.word);
 });
 
 listen<void>("plume:hide", () => {
@@ -395,9 +478,25 @@ invoke<[number, boolean, string]>("on_overlay_ready").then(async ([idle, trEnabl
     IDLE_MS = idle * 1000;
   }
 
-  const cfg = await invoke<{ window: { width: number; height: number } }>("get_config");
-  baseWidth = cfg.window.width || 400;
-  baseHeight = cfg.window.height || 150;
+  const cfg = await invoke<{
+    window: { min_height: number; max_height: number; min_width: number; max_width: number };
+    ai_suggestion_delay: number;
+    resize_debounce_ms: number;
+    hover_timeout_secs: number;
+  }>("get_config");
+  MIN_HEIGHT = cfg.window.min_height || 250;
+  MAX_HEIGHT = cfg.window.max_height || 800;
+  MIN_WIDTH = cfg.window.min_width || 400;
+  MAX_WIDTH = cfg.window.max_width || 800;
+  if (cfg.ai_suggestion_delay) {
+    aiSuggestionDelay = cfg.ai_suggestion_delay;
+  }
+  if (cfg.resize_debounce_ms) {
+    RESIZE_DEBOUNCE_MS = cfg.resize_debounce_ms;
+  }
+  if (cfg.hover_timeout_secs) {
+    HOVER_TIMEOUT_MS = cfg.hover_timeout_secs * 1000;
+  }
 
   if (trEnabled) {
     trSection.classList.remove("hidden");
@@ -410,4 +509,6 @@ invoke<[number, boolean, string]>("on_overlay_ready").then(async ([idle, trEnabl
   } else {
     trSection.classList.add("hidden");
   }
+
+  initialized = true;
 }).catch(() => {});

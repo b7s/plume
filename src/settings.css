@@ -175,3 +175,11 @@ body {
     color: #b0b0b0;
   }
 }
+
+.hidden {
+  display: none !important;
+}
+
+.cfg-model-custom {
+  margin-top: 4px;
+}

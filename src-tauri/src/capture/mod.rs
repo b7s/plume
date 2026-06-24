@@ -10,10 +10,31 @@ use uiautomation::{
 };
 
 use crate::engine;
+use crate::config;
 use crate::{PlaceholderPayload, SuggestionPayload};
 
-const DEBOUNCE_MS: u64 = 300;
-const MIN_WORD_LEN: usize = 1;
+/// Get the title of the top-level window that owns the given HWND.
+#[cfg(target_os = "windows")]
+fn get_window_title(hwnd: isize) -> String {
+    use windows::Win32::UI::WindowsAndMessaging::{GetAncestor, GetWindowTextW, GA_ROOT};
+    use windows::Win32::Foundation::HWND;
+    let hwnd = HWND(hwnd as *mut _);
+    // Walk up to the top-level window — the focused element is usually a child control
+    let root = unsafe { GetAncestor(hwnd, GA_ROOT) };
+    let root = if root.0.is_null() { hwnd } else { root };
+    let mut buf = [0u16; 512];
+    let len = unsafe { GetWindowTextW(root, &mut buf) };
+    if len > 0 {
+        String::from_utf16_lossy(&buf[..len as usize])
+    } else {
+        String::new()
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn get_window_title(_hwnd: isize) -> String {
+    String::new()
+}
 
 /// Mutable state for the capture loop (shared between the thread and async tasks).
 struct CaptureState {
@@ -46,10 +67,21 @@ pub fn start(app: AppHandle) {
         busy: AtomicBool::new(false),
     }));
 
+    let plume_pid = std::process::id();
+
     loop {
-        std::thread::sleep(Duration::from_millis(100));
+        let cfg = config::load();
+        std::thread::sleep(Duration::from_millis(cfg.poll_interval_ms));
 
         if let Ok(focused) = automation.get_focused_element() {
+            // Skip Plume's own window — typing in the textarea should not
+            // trigger the capture loop (feedback loop).
+            if let Ok(pid) = focused.get_process_id() {
+                if pid == plume_pid {
+                    continue;
+                }
+            }
+
             // Save HWND so insert_via_uia can target the right control
             // even if Plume's WebView2 briefly claims UIA focus on click.
             let hwnd_int = focused
@@ -67,28 +99,22 @@ pub fn start(app: AppHandle) {
             if let Some(text) = read_text(&focused) {
                 let app = app.clone();
                 let st = state_capture.clone();
-                handle_text(app, st, text, hwnd_int);
+                let title = get_window_title(hwnd_int);
+                handle_text(app, st, text, hwnd_int, title, &cfg);
             }
         }
     }
 }
 
 fn read_text(element: &UIElement) -> Option<String> {
+    // Try TextPattern first — used by rich text editors (Word, Notepad, browsers).
+    // Only read visible ranges, NOT selection (selection = highlighted text, not typing).
     if let Ok(text_pattern) = element.get_pattern::<UITextPattern>() {
         if let Ok(ranges) = text_pattern.get_visible_ranges() {
             for range in ranges {
                 if let Ok(text) = range.get_text(-1) {
                     if !text.is_empty() {
-                        return Some(text);
-                    }
-                }
-            }
-        }
-        if let Ok(selection) = text_pattern.get_selection() {
-            for range in selection {
-                if let Ok(text) = range.get_text(-1) {
-                    if !text.is_empty() {
-                        return Some(text);
+                        return Some(sanitize_text(&text));
                     }
                 }
             }
@@ -96,10 +122,11 @@ fn read_text(element: &UIElement) -> Option<String> {
         return None;
     }
 
+    // ValuePattern — used by simple input fields (text boxes, address bars).
     if let Ok(value_pattern) = element.get_pattern::<UIValuePattern>() {
         if let Ok(text) = value_pattern.get_value() {
             if !text.is_empty() {
-                return Some(text);
+                return Some(sanitize_text(&text));
             }
         }
     }
@@ -107,20 +134,40 @@ fn read_text(element: &UIElement) -> Option<String> {
     None
 }
 
-fn extract_word(text: &str) -> Option<String> {
+/// Strip control characters and other non-typed artifacts from captured text.
+fn sanitize_text(text: &str) -> String {
+    text.chars()
+        .filter(|c| {
+            // Keep printable chars, common whitespace, and newlines
+            !c.is_control() || *c == '\n' || *c == '\r' || *c == '\t'
+        })
+        .collect::<String>()
+        .replace('\u{200b}', "")  // zero-width space
+        .replace('\u{200d}', "")  // zero-width joiner
+        .replace('\u{feff}', "")  // BOM / zero-width no-break space
+}
+
+fn extract_word(text: &str, min_len: usize) -> Option<String> {
     let word = text
         .split_whitespace()
         .last()?
         .trim_end_matches(|c: char| c.is_ascii_punctuation());
 
-    if word.len() >= MIN_WORD_LEN {
+    if word.len() >= min_len {
         Some(word.to_lowercase())
     } else {
         None
     }
 }
 
-fn handle_text(app: AppHandle, st: Arc<Mutex<CaptureState>>, text: String, hwnd: isize) {
+fn handle_text(
+    app: AppHandle,
+    st: Arc<Mutex<CaptureState>>,
+    text: String,
+    hwnd: isize,
+    window_title: String,
+    cfg: &config::Config,
+) {
     let now = Instant::now();
     // For terminals, the full text is the entire screen buffer.
     // Use only the last line for typing detection — it's the input line
@@ -165,11 +212,11 @@ fn handle_text(app: AppHandle, st: Arc<Mutex<CaptureState>>, text: String, hwnd:
 
         // Large jump → paste, not typing
         let added = compare_text.len() - old_len;
-        if added > 5 {
+        if added > cfg.max_added_chars {
             return;
         }
 
-        let word = match extract_word(&compare_text) {
+        let word = match extract_word(&compare_text, cfg.min_word_len) {
             Some(w) => w,
             None => return,
         };
@@ -186,7 +233,7 @@ fn handle_text(app: AppHandle, st: Arc<Mutex<CaptureState>>, text: String, hwnd:
         }
 
         let elapsed = now.duration_since(guard.last_change);
-        if elapsed < Duration::from_millis(DEBOUNCE_MS) {
+        if elapsed < Duration::from_millis(cfg.debounce_ms) {
             return;
         }
 
@@ -203,13 +250,15 @@ fn handle_text(app: AppHandle, st: Arc<Mutex<CaptureState>>, text: String, hwnd:
                 corrections: Vec::new(),
                 word: word.clone(),
                 full_text: full_text.clone(),
+                window_title: window_title.clone(),
             },
         );
 
         let app2 = app.clone();
         let st2 = st.clone();
+        let title2 = window_title.clone();
         tauri::async_runtime::spawn(async move {
-            let result = run_suggestion(&app2, &word, &full_text).await;
+            let result = run_suggestion(&app2, &word, &full_text, &title2).await;
             if let Ok(g) = st2.lock() {
                 g.busy.store(false, Ordering::Relaxed);
             }
@@ -221,7 +270,7 @@ fn handle_text(app: AppHandle, st: Arc<Mutex<CaptureState>>, text: String, hwnd:
     }
 }
 
-async fn run_suggestion(app: &AppHandle, word: &str, full_text: &str) -> Result<(), String> {
+async fn run_suggestion(app: &AppHandle, word: &str, full_text: &str, window_title: &str) -> Result<(), String> {
     let cfg = crate::config::load();
     let count = cfg.suggestion_count.max(1);
     let response = engine::get_suggestions(word, count).await?;
@@ -231,6 +280,8 @@ async fn run_suggestion(app: &AppHandle, word: &str, full_text: &str) -> Result<
         translation: None,
         word: word.to_string(),
         full_text: full_text.to_string(),
+        ai_words: Vec::new(),
+        window_title: window_title.to_string(),
     };
 
     let _ = app.emit("plume:suggestions", payload);

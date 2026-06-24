@@ -12,19 +12,22 @@ pub struct Settings {
     pub model: String,
     pub endpoint: String,
     pub api_key: String,
+    pub headers: String,
     pub target_language: String,
     pub auto_show: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
+        let cfg = crate::config::Config::default();
         Self {
             material: "mica".into(),
             position: "bottom-center".into(),
-            provider: "local".into(),
-            model: "Qwen3.5-2B-Q4_K_M.gguf".into(),
-            endpoint: "http://127.0.0.1:8080".into(),
-            api_key: String::new(),
+            provider: cfg.provider,
+            model: cfg.model,
+            endpoint: cfg.endpoint,
+            api_key: cfg.api_key,
+            headers: cfg.headers,
             target_language: String::new(),
             auto_show: true,
         }
@@ -55,6 +58,7 @@ pub fn load(app: &AppHandle) -> Settings {
     if !config.api_key.is_empty() {
         settings.api_key = config.api_key;
     }
+    settings.headers = config.headers;
     if config.translation.enabled {
         settings.target_language = config.translation.language;
     } else {

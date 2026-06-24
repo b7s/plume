@@ -1,0 +1,14 @@
+{
+  "identifier": "settings",
+  "description": "Capability for Plume settings window",
+  "windows": ["settings"],
+  "webviews": ["settings"],
+  "permissions": [
+    "core:default",
+    "core:window:default",
+    "core:window:allow-close",
+    "core:event:default",
+    "clipboard-manager:default",
+    "store:default"
+  ]
+}

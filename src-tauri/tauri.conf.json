@@ -16,9 +16,9 @@
         "title": "Plume",
         "url": "index.html",
         "width": 400,
-        "height": 150,
-        "minWidth": 200,
-        "minHeight": 150,
+        "height": 250,
+        "minWidth": 400,
+        "minHeight": 250,
         "maxWidth": 800,
         "maxHeight": 800,
         "resizable": true,
@@ -39,6 +39,27 @@
           "effects": ["mica"],
           "state": "active"
         }
+      },
+      {
+        "label": "settings",
+        "title": "Plume Settings",
+        "url": "settings.html",
+        "width": 400,
+        "height": 560,
+        "minWidth": 340,
+        "minHeight": 420,
+        "resizable": true,
+        "minimizable": false,
+        "maximizable": false,
+        "transparent": false,
+        "decorations": true,
+        "shadow": true,
+        "alwaysOnTop": false,
+        "skipTaskbar": false,
+        "focus": true,
+        "focusable": true,
+        "visible": false,
+        "center": true
       }
     ],
     "security": {
