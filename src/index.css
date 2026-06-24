@@ -1,0 +1,574 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color-scheme: light dark;
+}
+
+#root {
+  height: 100%;
+}
+
+/* Card — the overlay container, also drag region */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 16px;
+  height: 100%;
+  -webkit-app-region: drag;
+  app-region: drag;
+  opacity: 1;
+  transition: opacity 300ms ease;
+  will-change: opacity;
+}
+
+.card.hidden {
+  display: none;
+}
+
+.card.fading {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Interactive elements must opt out of drag */
+.chip-word,
+.chip-copy,
+.chip-wrap,
+.tr-section,
+.tr-lang,
+.tr-btn,
+.tr-text,
+.tr-result,
+.tr-result-wrap,
+.tr-copy,
+.tr-action,
+.settings-btn {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+/* Word display */
+.word-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 20px;
+  padding-left: 4px;
+}
+
+.settings-btn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 4px;
+  padding: 3px;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.5;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.settings-btn:hover {
+  opacity: 1;
+  background: rgba(128, 128, 128, 0.12);
+}
+
+#word-label {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.5;
+}
+
+#word-display {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Suggestions row */
+.chips-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding-left: 4px;
+}
+
+/* Chip wrapper — word + separator + copy button */
+.chip-wrap {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+/* Word button — left part of the pill */
+.chip-word {
+  border: none;
+  padding: 5px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color 150ms ease, opacity 150ms ease;
+}
+
+.chip-word:active {
+  opacity: 0.7;
+}
+
+/* Vertical separator between word and copy button */
+.chip-sep {
+  width: 1px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+/* Copy button — right part of the pill */
+.chip-copy {
+  border: none;
+  font-size: 11px;
+  padding: 5px 8px 5px 6px;
+  cursor: pointer;
+  border-radius: 0;
+  transition: background-color 150ms ease, opacity 150ms ease;
+  line-height: 1;
+}
+
+.chip-copy:hover {
+  opacity: 0.85;
+}
+
+.chip-copy:active {
+  opacity: 0.7;
+}
+
+.chip-copy.copied {
+  font-weight: 600;
+}
+
+/* Loading skeleton */
+.chip.skeleton {
+  pointer-events: none;
+  color: transparent;
+  min-width: 48px;
+  min-height: 26px;
+  border-radius: 6px;
+  position: relative;
+}
+
+.chip.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  animation: pulse-slow 2s ease-in-out infinite;
+}
+
+/* Emoji button */
+.emoji-btn {
+  font-size: 16px;
+  padding: 5px 8px;
+}
+
+.chip.skeleton.circle {
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  min-height: 26px;
+}
+
+/* Divider between suggestions and translation */
+.divider {
+  height: 1px;
+  margin: 4px 0 6px;
+  flex-shrink: 0;
+}
+
+/* Translation section wrapper */
+.tr-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tr-section.hidden {
+  display: none;
+}
+
+/* Translation toolbar */
+.tr-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+/* Language select — minimal, no extra spacing */
+.tr-lang {
+  font-family: inherit;
+  font-size: 11px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 2px 4px;
+  margin: 0;
+  outline: none;
+  cursor: pointer;
+  background: transparent;
+  -webkit-appearance: auto;
+  appearance: auto;
+}
+
+.tr-lang:focus {
+  border-color: rgba(128, 128, 128, 0.4);
+}
+
+/* Translate button */
+.tr-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 4px;
+  padding: 4px;
+  margin: 0;
+  cursor: pointer;
+  background: transparent;
+  transition: background-color 150ms ease;
+}
+
+.tr-btn:hover {
+  background: rgba(128, 128, 128, 0.15);
+}
+
+.tr-btn:active {
+  opacity: 0.7;
+}
+
+.tr-btn.loading {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Translation textarea */
+.tr-text {
+  width: 100%;
+  font-family: inherit;
+  font-size: 12px;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin: 0;
+  outline: none;
+  resize: none;
+  overflow-y: auto;
+  line-height: 1.4;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.tr-text::placeholder {
+  opacity: 0.4;
+}
+
+.tr-text:focus {
+  outline: none;
+}
+
+/* Translation result */
+.tr-result-wrap {
+  position: relative;
+  margin: 0 4px;
+}
+
+.tr-result-wrap.hidden {
+  display: none;
+}
+
+.tr-copy {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 4px;
+  padding: 3px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 1;
+}
+
+.tr-result-wrap:hover .tr-copy {
+  opacity: 0.7;
+}
+
+.tr-copy:hover {
+  opacity: 1 !important;
+  background: rgba(128, 128, 128, 0.15);
+}
+
+.tr-copy.copied {
+  opacity: 1 !important;
+  color: #4caf50;
+}
+
+.tr-result {
+  font-size: 12px;
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin: 0;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.tr-result.hidden {
+  display: none;
+}
+
+/* Animations */
+.animate-slide-up {
+  animation: slideUp 0.2s ease-out both;
+}
+
+@keyframes slideUp {
+  0% { opacity: 0; transform: translateY(6px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* AI action select */
+.tr-action {
+  font-family: inherit;
+  font-size: 11px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 2px 4px;
+  margin: 0;
+  outline: none;
+  cursor: pointer;
+  background: transparent;
+  -webkit-appearance: auto;
+  appearance: auto;
+}
+
+.tr-action:focus {
+  border-color: rgba(128, 128, 128, 0.4);
+}
+
+/* ========== LIGHT THEME ========== */
+@media (prefers-color-scheme: light) {
+  body { color-scheme: light; }
+
+  .chip-wrap {
+    background: rgba(0, 0, 0, 0.05);
+  }
+
+  .chip-word {
+    background: transparent;
+    color: #1b1b1b;
+  }
+  .chip-word:hover {
+    background: rgba(0, 0, 0, 0.06);
+  }
+
+  .chip-sep {
+    background: rgba(0, 0, 0, 0.15);
+  }
+
+  .chip-copy {
+    background: transparent;
+    color: #616161;
+  }
+  .chip-copy:hover {
+    background: rgba(0, 0, 0, 0.06);
+    color: #1b1b1b;
+  }
+  .chip-copy.copied {
+    color: #4caf50;
+  }
+
+  .chip.skeleton {
+    background: rgba(0, 0, 0, 0.06);
+  }
+  .chip.skeleton::after {
+    background: linear-gradient(90deg, transparent, rgba(0, 0, 0, 0.08), transparent);
+  }
+
+  #word-display {
+    color: #1b1b1b;
+  }
+  #word-label {
+    color: #616161;
+  }
+
+  .divider {
+    background: rgba(0, 0, 0, 0.1);
+  }
+
+  .tr-lang {
+    color: #1b1b1b;
+    background: rgba(0, 0, 0, 0.04);
+    color-scheme: light;
+  }
+
+  .tr-lang option {
+    background: #ffffff;
+    color: #1b1b1b;
+  }
+
+  .tr-btn {
+    color: #424242;
+  }
+
+  .tr-text {
+    background: rgba(0, 0, 0, 0.04);
+    color: #1b1b1b;
+  }
+
+  .tr-result {
+    background: rgba(0, 0, 0, 0.04);
+    color: #1b1b1b;
+  }
+
+  .tr-copy {
+    color: #757575;
+  }
+
+  .settings-btn {
+    color: #616161;
+  }
+
+  .tr-action {
+    color: #1b1b1b;
+    background: rgba(0, 0, 0, 0.04);
+    color-scheme: light;
+  }
+
+  .tr-action option {
+    background: #ffffff;
+    color: #1b1b1b;
+  }
+}
+
+/* ========== DARK THEME ========== */
+@media (prefers-color-scheme: dark) {
+  body { color-scheme: dark; }
+
+  .chip-wrap {
+    background: rgba(255, 255, 255, 0.07);
+  }
+
+  .chip-word {
+    background: transparent;
+    color: #e0e0e0;
+  }
+  .chip-word:hover {
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .chip-sep {
+    background: rgba(255, 255, 255, 0.15);
+  }
+
+  .chip-copy {
+    background: transparent;
+    color: #9d9d9d;
+  }
+  .chip-copy:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #e0e0e0;
+  }
+  .chip-copy.copied {
+    color: #4caf50;
+  }
+
+  .chip.skeleton {
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .chip.skeleton::after {
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+  }
+
+  #word-display {
+    color: #e0e0e0;
+  }
+  #word-label {
+    color: #9d9d9d;
+  }
+
+  .divider {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .tr-lang {
+    color: #e0e0e0;
+    background: rgba(255, 255, 255, 0.06);
+    color-scheme: dark;
+  }
+
+  .tr-lang option {
+    background: #1f1f1f;
+    color: #e0e0e0;
+  }
+
+  .tr-btn {
+    color: #b0b0b0;
+  }
+
+  .tr-text {
+    background: rgba(255, 255, 255, 0.06);
+    color: #e0e0e0;
+  }
+
+  .tr-result {
+    background: rgba(255, 255, 255, 0.06);
+    color: #e0e0e0;
+  }
+
+  .tr-copy {
+    color: #9d9d9d;
+  }
+
+  .settings-btn {
+    color: #9d9d9d;
+  }
+
+  .tr-action {
+    color: #e0e0e0;
+    background: rgba(255, 255, 255, 0.06);
+    color-scheme: dark;
+  }
+
+  .tr-action option {
+    background: #1f1f1f;
+    color: #e0e0e0;
+  }
+}

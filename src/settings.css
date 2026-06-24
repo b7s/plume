@@ -1,0 +1,177 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color-scheme: light dark;
+  overflow: hidden;
+}
+
+#root {
+  height: 100%;
+}
+
+.settings {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.settings-header {
+  padding: 14px 16px 8px;
+}
+
+.settings-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.settings-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cfg-section {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.5;
+  margin-top: 8px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.15);
+}
+
+.cfg-section:first-child {
+  margin-top: 0;
+}
+
+.cfg-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.cfg-field > span {
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.7;
+}
+
+.cfg-input {
+  font-family: inherit;
+  font-size: 12px;
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  border-radius: 6px;
+  padding: 6px 8px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.cfg-input:focus {
+  border-color: rgba(0, 120, 212, 0.6);
+}
+
+.cfg-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.cfg-check input {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.cfg-check span {
+  font-size: 12px;
+}
+
+.settings-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 16px 14px;
+}
+
+.modal-btn {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 18px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.modal-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.modal-btn-primary {
+  background: #0078d4;
+  color: #fff;
+}
+
+.modal-btn-primary:hover:not(:disabled) {
+  background: #106ebe;
+}
+
+.modal-btn-secondary {
+  background: transparent;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+}
+
+/* ========== LIGHT THEME ========== */
+@media (prefers-color-scheme: light) {
+  body {
+    background: rgba(255, 255, 255, 0.92);
+    color: #1b1b1b;
+  }
+
+  .cfg-input {
+    background: rgba(0, 0, 0, 0.03);
+    color: #1b1b1b;
+    color-scheme: light;
+  }
+
+  .modal-btn-secondary {
+    color: #424242;
+  }
+}
+
+/* ========== DARK THEME ========== */
+@media (prefers-color-scheme: dark) {
+  body {
+    background: rgba(32, 32, 32, 0.95);
+    color: #e0e0e0;
+  }
+
+  .cfg-input {
+    background: rgba(255, 255, 255, 0.06);
+    color: #e0e0e0;
+    color-scheme: dark;
+  }
+
+  .cfg-input option {
+    background: #1f1f1f;
+    color: #e0e0e0;
+  }
+
+  .modal-btn-secondary {
+    color: #b0b0b0;
+  }
+}

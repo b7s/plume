@@ -1,0 +1,67 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-config-schema/schema.json",
+  "productName": "Plume",
+  "version": "0.1.0",
+  "identifier": "com.plume.suggestions",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist",
+    "beforeBuildCommand": "npm run generate-icons && npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "plume",
+        "title": "Plume",
+        "url": "index.html",
+        "width": 400,
+        "height": 150,
+        "minWidth": 200,
+        "minHeight": 150,
+        "maxWidth": 800,
+        "maxHeight": 800,
+        "resizable": true,
+        "minimizable": false,
+        "maximizable": false,
+        "closable": false,
+        "transparent": true,
+        "decorations": false,
+        "shadow": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "focus": false,
+        "focusable": false,
+        "hiddenTitle": true,
+        "visible": false,
+        "center": false,
+        "windowEffects": {
+          "effects": ["mica"],
+          "state": "active"
+        }
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' http://localhost:* https://api.openai.com https://api.anthropic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "nsis",
+    "windows": {
+      "wix": null,
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico"
+      }
+    },
+    "externalBin": [],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ]
+  },
+  "plugins": {}
+}
