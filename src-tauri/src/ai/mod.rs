@@ -9,29 +9,7 @@ fn capitalize(s: &str) -> String {
     c.next().map(|f| f.to_uppercase().to_string() + c.as_str()).unwrap_or_default()
 }
 
-fn lang_code_to_name(code: whatlang::Lang) -> &'static str {
-    match code {
-        whatlang::Lang::Eng => "English",
-        whatlang::Lang::Por => "Portuguese",
-        whatlang::Lang::Spa => "Spanish",
-        whatlang::Lang::Fra => "French",
-        whatlang::Lang::Deu => "German",
-        whatlang::Lang::Ita => "Italian",
-        whatlang::Lang::Rus => "Russian",
-        whatlang::Lang::Jpn => "Japanese",
-        whatlang::Lang::Cmn => "Chinese",
-        whatlang::Lang::Kor => "Korean",
-        whatlang::Lang::Ara => "Arabic",
-        whatlang::Lang::Nld => "Dutch",
-        _ => "Text",
-    }
-}
 
-fn detect_source_language(text: &str) -> &'static str {
-    whatlang::detect(text)
-        .map(|info| lang_code_to_name(info.lang()))
-        .unwrap_or("Text")
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LlmResponse {
@@ -400,6 +378,31 @@ impl LocalProvider {
                 .unwrap_or_default(),
         }
     }
+
+    async fn complete_text(&self, prompt: &str, n_predict: u32) -> Result<String, String> {
+        let body = serde_json::json!({
+            "prompt": prompt,
+            "n_predict": n_predict,
+            "temperature": 0.1,
+            "stop": ["\n\n"],
+        });
+
+        let resp = self
+            .client
+            .post(format!("{}/v1/completions", self.endpoint))
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| format!("request failed: {e}"))?;
+
+        let data: serde_json::Value =
+            resp.json().await.map_err(|e| format!("parse failed: {e}"))?;
+
+        data["content"]
+            .as_str()
+            .map(|s| s.trim().to_string())
+            .ok_or_else(|| "no content in response".to_string())
+    }
 }
 
 #[async_trait]
@@ -435,54 +438,23 @@ impl LlmProvider for LocalProvider {
     }
 
     async fn translate_text(&self, text: &str, language: &str) -> Result<String, String> {
-        let source = detect_source_language(text);
         let target = capitalize(language);
-        let prompt = format!("{source}: {text}\n{target}:");
-        let body = serde_json::json!({
-            "messages": [{"role": "user", "content": prompt}],
-            "stream": false,
-            "max_tokens": 256,
-            "temperature": 0.1,
-        });
-        let resp = self
-            .client
-            .post(format!("{}/v1/chat/completions", self.endpoint))
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| format!("request failed: {e}"))?;
-        let data: serde_json::Value =
-            resp.json().await.map_err(|e| format!("parse failed: {e}"))?;
-        extract_content(&data)
+        let prompt = format!("Translate the following text to {target}:\n\n{text}\n\n{target}:");
+        self.complete_text(&prompt, 256).await
     }
 
     async fn process_text(&self, text: &str, action: &str) -> Result<String, String> {
-        let label: String = match action {
-            "summarize" => "Summary".to_string(),
-            "shorter" => "Shorter".to_string(),
-            "longer" => "Expanded".to_string(),
-            "grammar" => "Corrected".to_string(),
-            a if a.starts_with("tone:") => capitalize(&a[5..]),
-            a if a.starts_with("format:") => capitalize(&a[7..]),
+        let (label, n_predict): (String, u32) = match action {
+            "summarize" => ("Summary".to_string(), 256),
+            "shorter" => ("Shorter".to_string(), 256),
+            "longer" => ("Expanded".to_string(), 512),
+            "grammar" => ("Corrected".to_string(), 256),
+            a if a.starts_with("tone:") => (capitalize(&a[5..]), 256),
+            a if a.starts_with("format:") => (capitalize(&a[7..]), 256),
             _ => return Err(format!("unknown action: {action}")),
         };
         let prompt = format!("{text}\n\n{label}:");
-        let body = serde_json::json!({
-            "messages": [{"role": "user", "content": prompt}],
-            "stream": false,
-            "max_tokens": 512,
-            "temperature": 0.1,
-        });
-        let resp = self
-            .client
-            .post(format!("{}/v1/chat/completions", self.endpoint))
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| format!("request failed: {e}"))?;
-        let data: serde_json::Value =
-            resp.json().await.map_err(|e| format!("parse failed: {e}"))?;
-        extract_content(&data)
+        self.complete_text(&prompt, n_predict).await
     }
 }
 
