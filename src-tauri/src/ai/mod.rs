@@ -9,6 +9,33 @@ fn capitalize(s: &str) -> String {
     c.next().map(|f| f.to_uppercase().to_string() + c.as_str()).unwrap_or_default()
 }
 
+fn lang_native(lang: &str) -> &str {
+    match lang.to_lowercase().as_str() {
+        "portuguese" => "Português",
+        "english" => "English",
+        "spanish" => "Español",
+        "french" => "Français",
+        "german" => "Deutsch",
+        "italian" => "Italiano",
+        "russian" => "Русский",
+        "japanese" => "日本語",
+        "chinese" => "中文",
+        "korean" => "한국어",
+        "arabic" => "العربية",
+        "dutch" => "Nederlands",
+        _ => "",
+    }
+}
+
+fn strip_thinking(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if let Some(idx) = trimmed.find("\n\n") {
+        trimmed[..idx].trim().to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
 
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -49,19 +76,34 @@ pub trait LlmProvider: Send + Sync {
     async fn complete_raw(&self, system: &str, prompt: &str) -> Result<String, String>;
 
     async fn translate_text(&self, text: &str, language: &str) -> Result<String, String> {
-        let system = format!(
-            "You are a professional translator. \
-             Your ONLY task: translate the user's text into {language}. \
-             Rules:\n\
-             - Output ONLY the {language} translation.\n\
-             - Do NOT include thinking, reasoning, or explanations.\n\
-             - Do NOT repeat the original text.\n\
-             - Do NOT add quotes or markdown.\n\
-             - Preserve the meaning, tone, and intent of the original text.\n\
-             - Use natural, fluent {language} — not a word-for-word translation.\n\
-             - Keep names, numbers, and dates as-is."
-        );
-        let prompt = format!("Translate this text to {language}:\n\n{text}");
+        let target = capitalize(language);
+        let native = lang_native(&target);
+        let system = if native.is_empty() {
+            format!(
+                "You are a translator. \
+                 The user sends you text and you translate it to {target}. \
+                 TARGET LANGUAGE: {target}. \
+                 Output ONLY the {target} translation — no explanations, no thinking, no original text."
+            )
+        } else {
+            format!(
+                "You are a translator. \
+                 The user sends you text and you translate it to {target} ({native}). \
+                 TARGET LANGUAGE: {target} / {native}. \
+                 Output ONLY the {target} translation — no explanations, no thinking, no original text."
+            )
+        };
+        let prompt = format!("Translate to {target}:\n\n{text}");
+        self.complete_raw(&system, &prompt).await
+    }
+
+    async fn explain_text(&self, text: &str) -> Result<String, String> {
+        let system = "You are an expert explainer. \
+                      The user sends you text and you explain what it means in simple terms. \
+                      Explain in the SAME language as the original text — do NOT translate. \
+                      Output ONLY the explanation — no thinking, no repetition of the original."
+            .to_string();
+        let prompt = format!("Explain this text:\n\n{text}\n\nExplanation:");
         self.complete_raw(&system, &prompt).await
     }
 
@@ -159,6 +201,17 @@ pub trait LlmProvider: Send + Sync {
                     format!("Reformat this text as {fmt_name}:\n\n{text}"),
                 )
             }
+            "makesense" => (
+                "You are an expert explainer. \
+                 Your ONLY task: explain what the user's text means in simple terms.\n\
+                 Rules:\n\
+                 - Rephrase the text to make its meaning clear.\n\
+                 - Keep the same language as the original text.\n\
+                 - Output ONLY the clarified text.\n\
+                 - Do NOT add quotes or markdown."
+                    .to_string(),
+                format!("What does this text mean? Explain in simple terms, in the same language:\n\n{text}"),
+            ),
             _ => return Err(format!("unknown action: {action}")),
         };
         self.complete_raw(&system, &prompt).await
@@ -379,17 +432,19 @@ impl LocalProvider {
         }
     }
 
-    async fn complete_text(&self, prompt: &str, n_predict: u32) -> Result<String, String> {
+    async fn complete_text(&self, prompt: &str, n_predict: u32, stop: &[&str]) -> Result<String, String> {
+        eprintln!("[plume] complete_text prompt: {prompt}");
+
         let body = serde_json::json!({
             "prompt": prompt,
             "n_predict": n_predict,
             "temperature": 0.1,
-            "stop": ["\n\n"],
+            "stop": stop,
         });
 
         let resp = self
             .client
-            .post(format!("{}/v1/completions", self.endpoint))
+            .post(format!("{}/completion", self.endpoint))
             .json(&body)
             .send()
             .await
@@ -398,10 +453,16 @@ impl LocalProvider {
         let data: serde_json::Value =
             resp.json().await.map_err(|e| format!("parse failed: {e}"))?;
 
-        data["content"]
+        eprintln!("[plume] completion response: {data}");
+
+        let raw = data["content"]
             .as_str()
-            .map(|s| s.trim().to_string())
-            .ok_or_else(|| "no content in response".to_string())
+            .or_else(|| data["choices"][0]["text"].as_str())
+            .ok_or_else(|| "no content in response".to_string())?;
+
+        let result = strip_thinking(raw);
+        eprintln!("[plume] complete_text result: {result}");
+        Ok(result)
     }
 }
 
@@ -437,24 +498,33 @@ impl LlmProvider for LocalProvider {
         extract_content(&data)
     }
 
-    async fn translate_text(&self, text: &str, language: &str) -> Result<String, String> {
-        let target = capitalize(language);
-        let prompt = format!("Translate the following text to {target}:\n\n{text}\n\n{target}:");
-        self.complete_text(&prompt, 256).await
-    }
+    async fn suggest_next_words(&self, text: &str, count: usize, _lang: &str) -> Result<Vec<String>, String> {
+        let last_words: Vec<&str> = text.split_whitespace().rev().take(10).collect();
+        let context = last_words.iter().rev().copied().collect::<Vec<_>>().join(" ");
 
-    async fn process_text(&self, text: &str, action: &str) -> Result<String, String> {
-        let (label, n_predict): (String, u32) = match action {
-            "summarize" => ("Summary".to_string(), 256),
-            "shorter" => ("Shorter".to_string(), 256),
-            "longer" => ("Expanded".to_string(), 512),
-            "grammar" => ("Corrected".to_string(), 256),
-            a if a.starts_with("tone:") => (capitalize(&a[5..]), 256),
-            a if a.starts_with("format:") => (capitalize(&a[7..]), 256),
-            _ => return Err(format!("unknown action: {action}")),
-        };
-        let prompt = format!("{text}\n\n{label}:");
-        self.complete_text(&prompt, n_predict).await
+        // Few-shot: model sees pattern of "text → next words" and completes
+        let prompt = format!(
+            "The cat jumped on the → roof, fence, table\n\
+             I went to the → store, park, beach\n\
+             {context} →"
+        );
+        let raw = self.complete_text(&prompt, 64, &["\n"]).await?;
+        eprintln!("[plume] ai_suggest raw response: {raw:?}");
+
+        let last_word = text.split_whitespace().last().unwrap_or("").to_lowercase();
+
+        let words: Vec<String> = raw
+            .split([',', '\n'])
+            .map(|s| s.trim().trim_start_matches(|c: char| c == '-' || c == '*' || c == '.' || c == ' ').to_string())
+            .filter(|s| !s.is_empty())
+            .filter(|s| {
+                let s_lower = s.to_lowercase();
+                s_lower != last_word && !last_word.contains(&s_lower)
+            })
+            .take(count)
+            .collect();
+        eprintln!("[plume] ai_suggest result: {words:?}");
+        Ok(words)
     }
 }
 

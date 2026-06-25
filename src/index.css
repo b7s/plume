@@ -26,10 +26,26 @@ body {
   flex-direction: column;
   gap: 6px;
   padding: 10px 16px;
-  height: 100%;
+  min-height: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  scrollbar-width: thin;
   -webkit-app-region: drag;
   app-region: drag;
   opacity: 1;
+}
+
+.card::-webkit-scrollbar {
+  width: 4px;
+}
+
+.card::-webkit-scrollbar-thumb {
+  border-radius: 2px;
+  background: rgba(128, 128, 128, 0.3);
+}
+
+.card::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 /* Interactive elements must opt out of drag */

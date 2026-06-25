@@ -329,6 +329,19 @@ async fn process_text(app: AppHandle, text: String, action: String) -> Result<St
 }
 
 #[tauri::command]
+async fn explain_text(app: AppHandle, text: String) -> Result<String, String> {
+    if text.trim().is_empty() {
+        return Err("empty text".into());
+    }
+    eprintln!("[plume] explain: text={text}");
+    let settings = state::load(&app);
+    let provider = ai::build_provider(&settings)?;
+    let result = provider.explain_text(&text).await?;
+    eprintln!("[plume] explain result: {result}");
+    Ok(result)
+}
+
+#[tauri::command]
 async fn suggest_next_words(app: AppHandle, text: String) -> Result<Vec<String>, String> {
     if text.trim().is_empty() {
         return Ok(Vec::new());
@@ -436,6 +449,7 @@ pub fn run() {
             set_dictionary_language,
             translate_text,
             process_text,
+            explain_text,
             suggest_next_words,
             check_model,
             download_model,

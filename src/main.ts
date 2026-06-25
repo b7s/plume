@@ -24,7 +24,7 @@ const TRANSLATION_LANGS: [string, string][] = [
   ["english", "English"],
   ["spanish", "Español"],
   ["french", "Français"],
-  ["german", "Deutsch"],
+  ["german (Deutsch)", "Deutsch"],
   ["italian", "Italiano"],
   ["russian", "Русский"],
   ["japanese", "日本語"],
@@ -58,7 +58,6 @@ function render() {
               <option value="shorter">Make shorter</option>
               <option value="longer">Make longer</option>
               <option value="grammar">Correct grammar</option>
-               <option value="makesense">Make sense</option>
               <optgroup label="Change tone">
                 <option value="tone:formal">Formal</option>
                 <option value="tone:casual">Casual</option>
@@ -80,6 +79,9 @@ function render() {
             </button>
           </div>
           <div class="tr-col tr-col-right">
+            <button id="tr-explain-btn" class="tr-btn" title="Explain this text">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M8 6v3M8 12h0"/><circle cx="8" cy="8" r="6"/><path d="M5 5s.5-2 3-2 3 2 2 3.5C9.5 8 8 8 8 9.5"/></svg>
+            </button>
             <select id="tr-lang" class="tr-lang" title="Translate to"></select>
             <button id="tr-btn" class="tr-btn" title="Translate">
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M2 4h7M5 2v2M7.5 4S7 7 4 9.5M4.5 7c-.5 1.5-1.8 2.7-3 3.2M14 13c0-2-1.5-4.5-4-4.5S6 11 6 13s1.5 4.5 4 4.5 4-2.5 4-4.5z"/></svg>
@@ -116,6 +118,7 @@ const trInsert = document.getElementById("tr-insert") as HTMLButtonElement;
 const settingsBtn = document.getElementById("settings-btn") as HTMLButtonElement;
 const trAction = document.getElementById("tr-action") as HTMLSelectElement;
 const trActionBtn = document.getElementById("tr-action-btn") as HTMLButtonElement;
+const trExplainBtn = document.getElementById("tr-explain-btn") as HTMLButtonElement;
 const aiLoading = document.getElementById("ai-loading")!;
 
 // Populate language select
@@ -388,6 +391,15 @@ trBtn.onclick = async () => {
   if (!text) return;
   await runLLM("Translating…", () =>
     invoke<string>("translate_text", { text, language: trLang.value })
+  );
+};
+
+// Explain
+trExplainBtn.onclick = async () => {
+  const text = trText.value.trim();
+  if (!text) return;
+  await runLLM("Explaining…", () =>
+    invoke<string>("explain_text", { text })
   );
 };
 
