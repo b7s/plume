@@ -72,7 +72,8 @@ jobs:
       - name: Get version
         id: version
         shell: bash
-        run: echo "version=$(grep '"version"' src-tauri/tauri.conf.json | head -1 | sed 's/.*: *"\([^"]*\)".*/\1/')" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "version=$(grep '"version"' src-tauri/tauri.conf.json | head -1 | sed 's/.*: *"\([^"]*\)".*/\1/')" >> "$GITHUB_OUTPUT"
 
       - name: Publish to WinGet
         uses: vedantmgoyal2009/winget-releaser@v2
