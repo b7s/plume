@@ -63,15 +63,12 @@ fn type_via_sendinput(text: &str, backspace: usize) -> bool {
     let mut inputs = Vec::with_capacity(backspace * 2 + text.chars().count() * 2);
 
     for _ in 0..backspace {
-        let mut ki = KEYBDINPUT::default();
-        ki.wVk = VIRTUAL_KEY(VK_BACK.0);
+        let ki = KEYBDINPUT { wVk: VIRTUAL_KEY(VK_BACK.0), ..Default::default() };
         inputs.push(INPUT {
             r#type: INPUT_KEYBOARD,
             Anonymous: INPUT_0 { ki },
         });
-        let mut ki = KEYBDINPUT::default();
-        ki.wVk = VIRTUAL_KEY(VK_BACK.0);
-        ki.dwFlags = KEYBD_EVENT_FLAGS(KEYEVENTF_KEYUP.0);
+        let ki = KEYBDINPUT { wVk: VIRTUAL_KEY(VK_BACK.0), dwFlags: KEYBD_EVENT_FLAGS(KEYEVENTF_KEYUP.0), ..Default::default() };
         inputs.push(INPUT {
             r#type: INPUT_KEYBOARD,
             Anonymous: INPUT_0 { ki },
@@ -79,16 +76,12 @@ fn type_via_sendinput(text: &str, backspace: usize) -> bool {
     }
 
     for ch in text.chars() {
-        let mut ki = KEYBDINPUT::default();
-        ki.wScan = ch as u16;
-        ki.dwFlags = KEYBD_EVENT_FLAGS(KEYEVENTF_UNICODE.0);
+        let ki = KEYBDINPUT { wScan: ch as u16, dwFlags: KEYBD_EVENT_FLAGS(KEYEVENTF_UNICODE.0), ..Default::default() };
         inputs.push(INPUT {
             r#type: INPUT_KEYBOARD,
             Anonymous: INPUT_0 { ki },
         });
-        let mut ki = KEYBDINPUT::default();
-        ki.wScan = ch as u16;
-        ki.dwFlags = KEYBD_EVENT_FLAGS(KEYEVENTF_UNICODE.0 | KEYEVENTF_KEYUP.0);
+        let ki = KEYBDINPUT { wScan: ch as u16, dwFlags: KEYBD_EVENT_FLAGS(KEYEVENTF_UNICODE.0 | KEYEVENTF_KEYUP.0), ..Default::default() };
         inputs.push(INPUT {
             r#type: INPUT_KEYBOARD,
             Anonymous: INPUT_0 { ki },
@@ -106,9 +99,7 @@ fn type_via_sendinput(text: &str, backspace: usize) -> bool {
 /// Used after ValuePattern.SetValue which resets caret to position 0.
 fn send_ctrl_end() -> bool {
     let make = |vk, flags| {
-        let mut ki = KEYBDINPUT::default();
-        ki.wVk = VIRTUAL_KEY(vk);
-        ki.dwFlags = KEYBD_EVENT_FLAGS(flags);
+        let ki = KEYBDINPUT { wVk: VIRTUAL_KEY(vk), dwFlags: KEYBD_EVENT_FLAGS(flags), ..Default::default() };
         INPUT {
             r#type: INPUT_KEYBOARD,
             Anonymous: INPUT_0 { ki },

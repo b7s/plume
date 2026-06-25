@@ -1,10 +1,12 @@
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./app-icon-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="./app-icon-light.png">
-  <img alt="Plume" src="./app-icon.png" width="64" height="64">
-</picture>
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./app-icon-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="./app-icon-light.png">
+    <img alt="Plume" src="./app-icon.png" width="128" height="128">
+  </picture>
 
-# Plume
+  <h1>Plume</h1>
+</div>
 
 **Floating typing assistant for Windows.** Plume sits as a transparent overlay above your active window, listens via UI Automation (no keyloggers), and serves up smart suggestions — Hunspell-powered spelling corrections, AI next-word predictions, translation, and text actions.
 
@@ -38,7 +40,7 @@ The overlay stays on top of all windows, auto-hides after a configurable idle ti
 ### Install
 
 ```
-winget install Plume
+winget install b7s.Plume
 ```
 
 Or download the latest `.exe` installer from [Releases](https://github.com/b7s/plume/releases).
@@ -172,23 +174,23 @@ npm run tauri build    # Production build
 ```
                         ┌─────────────┐
                         │   Overlay   │  WebView2 (transparent)
-                        │  (TS/CSS)   │  floating window
+                        │   (TS/CSS)  │  floating window
                         └──────┬──────┘
                                │ Tauri IPC (events + commands)
                         ┌──────┴──────┐
                         │    Tauri    │  Rust backend
-                        │  (lib.rs)   │
+                        │   (lib.rs)  │
                         └──────┬──────┘
               ┌────────────────┼────────────────┐
-        ┌─────┴─────┐  ┌──────┴──────┐  ┌──────┴──────┐
-        │  Capture   │  │    AI /     │  │  Spellcheck │
-        │ (UIA)      │  │  Engine     │  │  (Hunspell) │
+        ┌─────┴─────┐  ┌───────┴─────┐  ┌───────┴─────┐
+        │  Capture  │  │     AI /    │  │  Spellcheck │
+        │   (UIA)   │  │    Engine   │  │  (Hunspell) │
         └───────────┘  └─────────────┘  └─────────────┘
                               │
-                    ┌─────────┴─────────┐
-                    │  llama.cpp  │  API  │
-                    │  (local)    │ (cloud)│
-                    └─────────────┴───────┘
+                ┌─────────────┴───────────┐
+                │  llama.cpp  │  API      │
+                │  (local)    │ (cloud)   │
+                └─────────────┴───────────┘
 ```
 
 - **Capture** — `capture/mod.rs`: UIAutomation polling loop, reads TextPattern/ValuePattern, debounces

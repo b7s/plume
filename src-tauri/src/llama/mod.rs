@@ -141,7 +141,7 @@ impl LlamaSetup {
             .find(|a| {
                 a["name"]
                     .as_str()
-                    .map_or(false, |n| n.contains("win-cpu-x64") && n.ends_with(".zip"))
+                    .is_some_and(|n| n.contains("win-cpu-x64") && n.ends_with(".zip"))
             })
             .and_then(|a| a["browser_download_url"].as_str())
             .ok_or("no win-cpu-x64 zip asset")?;

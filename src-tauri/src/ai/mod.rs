@@ -181,9 +181,9 @@ fn parse_suggestions(raw: &str, context: &str, count: usize) -> Vec<String> {
             // patterns like "1. ", "- ", ". . " all vanish.
             loop {
                 let stripped = s
-                    .trim_start_matches(|c: char| c == '-' || c == '*' || c == '.' || c == ' ')
+                    .trim_start_matches(['-', '*', '.', ' '])
                     .trim_start_matches(|c: char| c.is_ascii_digit())
-                    .trim_start_matches(|c: char| c == '.' || c == ' ');
+                    .trim_start_matches(['.', ' ']);
                 if stripped.len() == s.len() {
                     break;
                 }

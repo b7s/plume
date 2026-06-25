@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - release
+    tags:
+      - 'v*'
 
 jobs:
   publish-tauri:
@@ -28,6 +30,8 @@ jobs:
 
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -37,6 +41,15 @@ jobs:
       - name: install frontend dependencies
         run: npm ci
 
+      - name: quality gates - frontend type-check
+        run: npm run build
+
+      - name: quality gates - Rust clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+
+      - name: quality gates - Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -44,6 +57,27 @@ jobs:
           tagName: plume-v__VERSION__
           releaseName: 'Plume v__VERSION__'
           releaseBody: 'See the assets below to download and install this version.'
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
+
+  publish-winget:
+    needs: publish-tauri
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        shell: bash
+        run: echo "version=$(grep '"version"' src-tauri/tauri.conf.json | head -1 | sed 's/.*: *"\([^"]*\)".*/\1/')" >> "$GITHUB_OUTPUT"
+
+      - name: Publish to WinGet
+        uses: vedantmgoyal2009/winget-releaser@v2
+        with:
+          identifier: b7s.Plume
+          version: ${{ steps.version.outputs.version }}
+          installers-regex: '\.exe$'
+          token: ${{ secrets.WINGET_TOKEN }}

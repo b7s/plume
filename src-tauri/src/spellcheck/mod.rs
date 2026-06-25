@@ -178,7 +178,7 @@ pub fn init(language: &str) -> Result<(), String> {
 }
 
 pub fn is_initialized() -> bool {
-    DICT.lock().ok().map_or(false, |g| g.is_some())
+    DICT.lock().ok().is_some_and(|g| g.is_some())
 }
 
 pub fn check(word: &str) -> Result<bool, String> {

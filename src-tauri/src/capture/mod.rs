@@ -164,9 +164,7 @@ fn sanitize_text(text: &str) -> String {
             }
         })
         .collect::<String>()
-        .replace('\u{200b}', "")
-        .replace('\u{200d}', "")
-        .replace('\u{feff}', "")
+        .replace(['\u{200b}', '\u{200d}', '\u{feff}'], "")
 }
 
 fn extract_word(text: &str, min_len: usize) -> Option<String> {
@@ -231,10 +229,8 @@ fn handle_text(
             if !is_prefix {
                 guard.last_word = String::new();
                 guard.suppress = added_chars > cfg.max_added_chars;
-            } else if added_chars > cfg.max_added_chars {
-                guard.suppress = true;
             } else {
-                guard.suppress = false;
+                guard.suppress = added_chars > cfg.max_added_chars;
             }
         }
 
