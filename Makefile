@@ -1,4 +1,4 @@
-SHELL := pwsh
+SHELL := C:\Program Files\WindowsApps\Microsoft.PowerShell_7.6.3.0_x64__8wekyb3d8bbwe\pwsh.exe
 .SHELLFLAGS := -NoLogo -NoProfile -Command
 
 .PHONY: help install dev build build-release check lint release clean version-bump
@@ -6,7 +6,6 @@ SHELL := pwsh
 RELEASE_VERSION := $(if $(VERSION),$(VERSION),$(version))
 RELEASE_MESSAGE := $(if $(MESSAGE),$(MESSAGE),$(message))
 
-APP_NAME := Plume
 TAURI_DIR := src-tauri
 CARGO := cargo
 NPM := npm
@@ -20,7 +19,7 @@ help:
 	@echo "  make check                       - Run all quality gates (lint + clippy + test)"
 	@echo "  make lint                        - Run linters (frontend + backend)"
 	@echo "  make version-bump version=x.y.z  - Bump version across all config files"
-	@echo "  make release version=x.y.z [message='msg'] - Bump version, commit, tag and push"
+	@echo "  make release version=x.y.z [message='msg'] - Commit, tag, push, then update local files"
 	@echo "  make clean                       - Clean build artifacts and caches"
 
 install:
