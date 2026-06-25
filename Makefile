@@ -1,3 +1,6 @@
+SHELL := pwsh
+.SHELLFLAGS := -NoLogo -NoProfile -Command
+
 .PHONY: help install dev build build-release check lint release clean version-bump
 
 RELEASE_VERSION := $(if $(VERSION),$(VERSION),$(version))
@@ -48,40 +51,38 @@ check: lint
 	@echo "All quality gates passed."
 
 version-bump:
-	@if [ -z "$(RELEASE_VERSION)" ]; then echo "Error: provide version=x.y.z"; exit 1; fi
-	@if ! echo "$(RELEASE_VERSION)" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$'; then echo "Error: invalid version format. Expected x.y.z"; exit 1; fi
+	@if (-not "$(RELEASE_VERSION)") { Write-Error "provide version=x.y.z"; exit 1 }
+	@if ("$(RELEASE_VERSION)" -notmatch '^\d+\.\d+\.\d+$$') { Write-Error "invalid version format. Expected x.y.z"; exit 1 }
 	@echo "Bumping version to $(RELEASE_VERSION)..."
-	@sed -i 's/"version": "[^"]*"/"version": "$(RELEASE_VERSION)"/' $(TAURI_DIR)/tauri.conf.json
-	@sed -i 's/^version = "[^"]*"/version = "$(RELEASE_VERSION)"/' $(TAURI_DIR)/Cargo.toml
-	@sed -i 's/"version": "[^"]*"/"version": "$(RELEASE_VERSION)"/' package.json
-	@echo "$(RELEASE_VERSION)" > version
+	@(Get-Content $(TAURI_DIR)/tauri.conf.json) -replace '"version": "[^"]*"', '"version": "$(RELEASE_VERSION)"' | Set-Content $(TAURI_DIR)/tauri.conf.json
+	@(Get-Content $(TAURI_DIR)/Cargo.toml) -replace '^version = "[^"]*"', 'version = "$(RELEASE_VERSION)"' | Set-Content $(TAURI_DIR)/Cargo.toml
+	@(Get-Content package.json) -replace '"version": "[^"]*"', '"version": "$(RELEASE_VERSION)"' | Set-Content package.json
+	@Set-Content -Path version -Value "$(RELEASE_VERSION)"
 	@echo "Version bumped to $(RELEASE_VERSION) in tauri.conf.json, Cargo.toml, package.json, version"
 
-release: check version-bump
-	@if [ -z "$(RELEASE_VERSION)" ]; then echo "Error: provide version=x.y.z"; exit 1; fi
-	MESSAGE_INPUT="$(RELEASE_MESSAGE)"; \
-	if [ -z "$$MESSAGE_INPUT" ]; then \
-		MESSAGE_INPUT="Release v$(RELEASE_VERSION)"; \
-	fi; \
-	echo "Staging files..."; \
-	git add -A; \
-	echo "Creating commit..."; \
-	git commit -m "$$MESSAGE_INPUT"; \
-	echo "Pushing to origin..."; \
-	git push origin HEAD; \
-	echo "Creating tag v$(RELEASE_VERSION)..."; \
-	git tag -a "v$(RELEASE_VERSION)" -m "$$MESSAGE_INPUT"; \
-	echo "Pushing tag..."; \
-	git push origin "v$(RELEASE_VERSION)"; \
+release: check
+	@if (-not "$(RELEASE_VERSION)") { Write-Error "provide version=x.y.z"; exit 1 }
+	@if ("$(RELEASE_VERSION)" -notmatch '^\d+\.\d+\.\d+$$') { Write-Error "invalid version format. Expected x.y.z"; exit 1 }
+	$$msg = "$(RELEASE_MESSAGE)"; if (-not $$msg) { $$msg = "Release v$(RELEASE_VERSION)" }; \
+	echo "Staging files..."; git add -A; \
+	echo "Creating commit..."; git commit -m $$msg; \
+	echo "Pushing to origin..."; git push origin HEAD; \
+	echo "Creating tag v$(RELEASE_VERSION)..."; git tag -a "v$(RELEASE_VERSION)" -m $$msg; \
+	echo "Pushing tag..."; git push origin "v$(RELEASE_VERSION)"; \
 	echo ""; \
-	echo "Release v$(RELEASE_VERSION) created."; \
-	echo "GitHub Actions will build and publish automatically."; \
+	echo "Tag v$(RELEASE_VERSION) pushed. GitHub Actions will build the release."; \
+	echo "Updating local config files to new version..."; \
+	(Get-Content $(TAURI_DIR)/tauri.conf.json) -replace '"version": "[^"]*"', '"version": "$(RELEASE_VERSION)"' | Set-Content $(TAURI_DIR)/tauri.conf.json; \
+	(Get-Content $(TAURI_DIR)/Cargo.toml) -replace '^version = "[^"]*"', 'version = "$(RELEASE_VERSION)"' | Set-Content $(TAURI_DIR)/Cargo.toml; \
+	(Get-Content package.json) -replace '"version": "[^"]*"', '"version": "$(RELEASE_VERSION)"' | Set-Content package.json; \
+	Set-Content -Path version -Value "$(RELEASE_VERSION)"; \
+	echo "Local files updated to $(RELEASE_VERSION)."; \
 	echo "https://github.com/b7s/plume/releases/tag/v$(RELEASE_VERSION)"
 
 clean:
 	@echo "Cleaning frontend artifacts..."
-	rm -rf dist/
-	rm -rf node_modules/.vite/
+	Remove-Item -Recurse -Force -Path dist/ -ErrorAction SilentlyContinue
+	Remove-Item -Recurse -Force -Path node_modules/.vite/ -ErrorAction SilentlyContinue
 	@echo "Cleaning Rust artifacts..."
-	rm -rf $(TAURI_DIR)/target/
+	Remove-Item -Recurse -Force -Path $(TAURI_DIR)/target/ -ErrorAction SilentlyContinue
 	@echo "Clean complete."
