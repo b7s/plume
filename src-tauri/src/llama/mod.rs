@@ -11,6 +11,27 @@ const USER_AGENT: &str = "Plume/0.1";
 
 pub static LLAMA_PROCESS: Mutex<Option<Child>> = Mutex::new(None);
 
+/// Kill the managed llama-server child (if running) plus any orphaned
+/// `llama-server.exe` processes left behind by a hard exit (common in dev).
+/// Without this, a stale server can keep holding our port and serving the
+/// previous model, which makes a model change look like it "wasn't recognized".
+pub fn kill_all() {
+    if let Ok(mut proc) = LLAMA_PROCESS.lock() {
+        if let Some(ref mut child) = *proc {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        *proc = None;
+    }
+    // Mop up orphans so they can't keep our port alive.
+    let _ = Command::new("taskkill")
+        .args(["/F", "/IM", "llama-server.exe"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .output();
+}
+
 /// Auto-construct a HuggingFace download URL from a GGUF model filename.
 /// e.g. "Qwen3-0.6B-Q4_K_M.gguf" -> "unsloth/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf"
 fn resolve_model_url(model: &str) -> String {

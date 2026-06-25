@@ -369,7 +369,7 @@ body {
 
 .tr-copy:hover {
   opacity: 1 !important;
-  background: rgba(128, 128, 128, 0.15);
+  background: rgba(128, 128, 128, 0.45);
 }
 
 .tr-copy.copied {

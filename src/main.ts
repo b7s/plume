@@ -104,6 +104,9 @@ function render() {
 
 render();
 
+// Disable the browser/webview right-click context menu app-wide.
+document.addEventListener("contextmenu", (e) => e.preventDefault());
+
 const overlay = document.getElementById("overlay")!;
 const wordDisplay = document.getElementById("word-display")!;
 const chipsContainer = document.getElementById("chips")!;
@@ -151,14 +154,29 @@ let HOVER_TIMEOUT_MS = 30_000;
 let aiSuggestionTimer: ReturnType<typeof setTimeout> | null = null;
 let aiSuggestionDelay = 800;
 
+let windowOpacity = 100;
+
+function applyOpacity() {
+  const active = isHovering || overlayActivatable;
+  const val = active ? 1 : windowOpacity / 100;
+  const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const r = isDark ? 25 : 245;
+  const g = isDark ? 25 : 245;
+  const b = isDark ? 25 : 245;
+  document.body.style.background = `rgba(${r}, ${g}, ${b}, ${val})`;
+  invoke("set_window_opacity", { opacity: active ? 100 : windowOpacity }).catch(() => {});
+}
+
 document.body.addEventListener("mouseenter", () => {
   isHovering = true;
+  applyOpacity();
   if (isVisible) {
     scheduleHide();
   }
 });
 document.body.addEventListener("mouseleave", () => {
   isHovering = false;
+  applyOpacity();
   if (isVisible) {
     scheduleHide();
   }
@@ -170,6 +188,30 @@ let lastTargetHeight = -1;
 trText.addEventListener("input", () => {
   userEditedText = true;
   autoResize();
+});
+
+// The overlay window is WS_EX_NOACTIVATE so it never steals focus while you
+// type in another app — but that also blocks keystrokes from reaching this
+// textarea. When the textarea is interacted with we make the window
+// focusable/active so you can type freely; when focus leaves it we restore
+// the no-activate behavior so chip clicks keep working as before.
+let overlayActivatable = false;
+function setOverlayActivatable(v: boolean) {
+  if (overlayActivatable === v) return;
+  overlayActivatable = v;
+  invoke("set_window_activatable", { activatable: v }).catch(() => {});
+  applyOpacity();
+}
+trText.addEventListener("pointerdown", () => setOverlayActivatable(true));
+trText.addEventListener("focus", () => setOverlayActivatable(true));
+trText.addEventListener("blur", () => setOverlayActivatable(false));
+
+// When the window loses focus (click outside), reset interaction state
+// so the background returns to the saved opacity/blur.
+win.listen("tauri://blur", () => {
+  isHovering = false;
+  overlayActivatable = false;
+  applyOpacity();
 });
 
 function autoResize() {
@@ -209,10 +251,15 @@ function showOverlay() {
     clearTimeout(idleTimer);
     idleTimer = null;
   }
+  // Reset interaction state so applyOpacity uses the saved opacity.
+  // mouseenter/focus will re-activate if the user interacts.
+  isHovering = false;
+  overlayActivatable = false;
   if (!isVisible) {
     isVisible = true;
     win.show().catch(() => {});
   }
+  applyOpacity();
   scheduleHide();
 }
 
@@ -223,6 +270,8 @@ function scheduleHide() {
   const timeout = isHovering ? HOVER_TIMEOUT_MS : IDLE_MS;
   idleTimer = setTimeout(() => {
     isVisible = false;
+    isHovering = false;
+    overlayActivatable = false;
     win.hide().catch(() => {});
   }, timeout);
 }
@@ -233,6 +282,8 @@ function hideOverlay() {
     idleTimer = null;
   }
   isVisible = false;
+  isHovering = false;
+  setOverlayActivatable(false);
   win.hide().catch(() => {});
 }
 
@@ -268,7 +319,6 @@ function makeChip(word: string, index: number, isAi = false): HTMLElement {
   }
   btn.onclick = () => {
     invoke("accept_text", { text: word }).catch(console.error);
-    hideOverlay();
   };
   wrap.appendChild(btn);
 
@@ -485,6 +535,14 @@ listen<SuggestionPayload>("plume:suggestions", (evt) => {
   showSuggestions(evt.payload);
 });
 
+listen<number>("plume:config-updated", async () => {
+  const cfg = await invoke<{ window_opacity: number }>("get_config");
+  if (typeof cfg.window_opacity === "number" && cfg.window_opacity >= 0 && cfg.window_opacity <= 100) {
+    windowOpacity = cfg.window_opacity;
+  }
+  applyOpacity();
+});
+
 invoke<[number, boolean, string]>("on_overlay_ready").then(async ([idle, trEnabled, trLangStr]) => {
   if (typeof idle === "number" && idle > 0) {
     IDLE_MS = idle * 1000;
@@ -495,6 +553,8 @@ invoke<[number, boolean, string]>("on_overlay_ready").then(async ([idle, trEnabl
     ai_suggestion_delay: number;
     resize_debounce_ms: number;
     hover_timeout_secs: number;
+    window_opacity: number;
+    hide_during_fullscreen: boolean;
   }>("get_config");
   MIN_HEIGHT = cfg.window.min_height || 250;
   MAX_HEIGHT = cfg.window.max_height || 800;
@@ -508,6 +568,10 @@ invoke<[number, boolean, string]>("on_overlay_ready").then(async ([idle, trEnabl
   }
   if (cfg.hover_timeout_secs) {
     HOVER_TIMEOUT_MS = cfg.hover_timeout_secs * 1000;
+  }
+  if (typeof cfg.window_opacity === "number" && cfg.window_opacity >= 0 && cfg.window_opacity <= 100) {
+    windowOpacity = cfg.window_opacity;
+    applyOpacity();
   }
 
   if (trEnabled) {

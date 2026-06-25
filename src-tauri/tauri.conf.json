@@ -34,11 +34,7 @@
         "focusable": false,
         "hiddenTitle": true,
         "visible": false,
-        "center": false,
-        "windowEffects": {
-          "effects": ["mica"],
-          "state": "active"
-        }
+        "center": false
       },
       {
         "label": "settings",

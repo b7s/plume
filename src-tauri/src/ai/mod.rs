@@ -27,13 +27,189 @@ fn lang_native(lang: &str) -> &str {
     }
 }
 
-fn strip_thinking(raw: &str) -> String {
-    let trimmed = raw.trim();
-    if let Some(idx) = trimmed.find("\n\n") {
-        trimmed[..idx].trim().to_string()
-    } else {
-        trimmed.to_string()
+/// Best-effort, dependency-free language detection from the USER'S TEXT.
+///
+/// Distinct-script languages (CJK, Cyrillic, Arabic, etc.) are detected
+/// reliably from their Unicode block. Latin-script detection uses common
+/// stopwords and only returns a name when there is a clear, unique winner;
+/// otherwise we return `None` and the caller instructs the model to continue
+/// in the same language as the text. We NEVER consult the dictionary/settings
+/// language — the text itself is the only source of truth.
+fn detect_language(text: &str) -> Option<&'static str> {
+    let mut cjk = 0usize;
+    let mut kana = 0usize;
+    let mut hangul = 0usize;
+    let mut cyrillic = 0usize;
+    let mut arabic = 0usize;
+    let mut greek = 0usize;
+    let mut hebrew = 0usize;
+    let mut devanagari = 0usize;
+    let mut thai = 0usize;
+    let mut latin = 0usize;
+
+    for ch in text.chars() {
+        if !ch.is_alphabetic() {
+            continue;
+        }
+        let cp = ch as u32;
+        if (0x3040..=0x30FF).contains(&cp) {
+            kana += 1; // Hiragana / Katakana
+        } else if (0x4E00..=0x9FFF).contains(&cp) || (0x3400..=0x4DBF).contains(&cp) {
+            cjk += 1;
+        } else if (0xAC00..=0xD7AF).contains(&cp) || (0x1100..=0x11FF).contains(&cp) {
+            hangul += 1;
+        } else if (0x0400..=0x04FF).contains(&cp) {
+            cyrillic += 1;
+        } else if (0x0600..=0x06FF).contains(&cp) || (0x0750..=0x077F).contains(&cp) {
+            arabic += 1;
+        } else if (0x0370..=0x03FF).contains(&cp) {
+            greek += 1;
+        } else if (0x0590..=0x05FF).contains(&cp) {
+            hebrew += 1;
+        } else if (0x0900..=0x097F).contains(&cp) {
+            devanagari += 1;
+        } else if (0x0E00..=0x0E7F).contains(&cp) {
+            thai += 1;
+        } else if ch.is_ascii_alphabetic() {
+            latin += 1;
+        }
     }
+
+    // Distinct scripts: detection is essentially certain.
+    if kana > 0 {
+        return Some("Japanese");
+    }
+    if hangul > 0 {
+        return Some("Korean");
+    }
+    if cjk > 0 {
+        return Some("Chinese");
+    }
+    if cyrillic > 0 {
+        return Some("Russian");
+    }
+    if arabic > 0 {
+        return Some("Arabic");
+    }
+    if greek > 0 {
+        return Some("Greek");
+    }
+    if hebrew > 0 {
+        return Some("Hebrew");
+    }
+    if devanagari > 0 {
+        return Some("Hindi");
+    }
+    if thai > 0 {
+        return Some("Thai");
+    }
+
+    // Latin script: score by distinctive stopwords. Only commit when there is
+    // a unique winner — otherwise let the model continue in the text's language.
+    if latin >= 2 {
+        let lower = text.to_lowercase();
+        let tokens: std::collections::HashSet<&str> = lower.split_whitespace().collect();
+        let score = |words: &[&str]| {
+            // Count each distinct stopword once so repeated entries can't
+            // inflate a language's score.
+            let mut seen = std::collections::HashSet::new();
+            words.iter().filter(|w| tokens.contains(**w) && seen.insert(**w)).count()
+        };
+
+        // Lists favour high-specificity function words / contractions.
+        let scores: [(&str, usize); 8] = [
+            ("Portuguese", score(&["não", "você", "está", "sou", "estou", "uma", "isso", "olá", "tudo", "bom", "com", "para"])),
+            ("Spanish", score(&["no", "qué", "está", "estoy", "muy", "bueno", "hola", "para", "con", "los", "las", "una"])),
+            ("French", score(&["ne", "pas", "vous", "être", "avec", "les", "est", "je", "suis", "bon", "pour", "une"])),
+            ("German", score(&["nicht", "ist", "ein", "eine", "ich", "und", "der", "die", "das", "mit", "für", "sehr"])),
+            ("Italian", score(&["che", "sono", "per", "una", "come", "perché", "ciao", "non", "è", "molto", "buono", "con"])),
+            ("Dutch", score(&["het", "een", "niet", "is", "en", "van", "ik", "ben", "met", "goed", "voor", "wel"])),
+            ("English", score(&["the", "and", "is", "are", "you", "not", "with", "for", "hello", "good", "have", "this"])),
+            ("Romanian", score(&["nu", "sunt", "pentru", "o", "cu", "mai", "acest", "bun", "salut", "foarte", "este", "îmi"])),
+        ];
+
+        let mut best = ("", 0usize);
+        let mut tie = false;
+        for (name, s) in scores {
+            match s.cmp(&best.1) {
+                std::cmp::Ordering::Greater => {
+                    best = (name, s);
+                    tie = false;
+                }
+                std::cmp::Ordering::Equal if best.1 > 0 => tie = true,
+                _ => {}
+            }
+        }
+        if !tie && best.1 >= 1 {
+            return Some(match best.0 {
+                "Portuguese" => "Portuguese",
+                "Spanish" => "Spanish",
+                "French" => "French",
+                "German" => "German",
+                "Italian" => "Italian",
+                "Dutch" => "Dutch",
+                "English" => "English",
+                "Romanian" => "Romanian",
+                _ => return None,
+            });
+        }
+    }
+
+    None
+}
+
+/// Parse an LLM "next-words" response into a clean, de-duplicated list.
+///
+/// Handles numbered/bulleted lines, comma-separated options, surrounding
+/// quotes, and trailing punctuation. Only drops a candidate when it is an
+/// exact echo of the last typed word or a case-insensitive duplicate — never
+/// for merely sharing a substring with the user's text.
+fn parse_suggestions(raw: &str, context: &str, count: usize) -> Vec<String> {
+    let last_word = context
+        .split_whitespace()
+        .next_back()
+        .map(str::to_lowercase)
+        .unwrap_or_default();
+
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut out: Vec<String> = Vec::new();
+
+    for line in raw.lines() {
+        for cand in line.split(',') {
+            let mut s = cand.trim();
+            // Repeatedly strip leading list markers / numbers / dots so that
+            // patterns like "1. ", "- ", ". . " all vanish.
+            loop {
+                let stripped = s
+                    .trim_start_matches(|c: char| c == '-' || c == '*' || c == '.' || c == ' ')
+                    .trim_start_matches(|c: char| c.is_ascii_digit())
+                    .trim_start_matches(|c: char| c == '.' || c == ' ');
+                if stripped.len() == s.len() {
+                    break;
+                }
+                s = stripped;
+            }
+            let s = s
+                .trim_matches(|c: char| c == '"' || c == '\'' || c == '“' || c == '”' || c == '«' || c == '»')
+                .trim_end_matches(|c: char| c.is_ascii_punctuation())
+                .trim();
+            if s.is_empty() {
+                continue;
+            }
+            let lower = s.to_lowercase();
+            if !last_word.is_empty() && lower == last_word {
+                continue;
+            }
+            if !seen.insert(lower) {
+                continue;
+            }
+            out.push(s.to_string());
+            if out.len() >= count {
+                return out;
+            }
+        }
+    }
+    out
 }
 
 
@@ -217,96 +393,54 @@ pub trait LlmProvider: Send + Sync {
         self.complete_raw(&system, &prompt).await
     }
 
-    async fn suggest_next_words(&self, text: &str, count: usize, lang: &str) -> Result<Vec<String>, String> {
-        let lang_name = match lang {
-            "pt_BR" | "pt_PT" => "Portuguese",
-            "en_US" | "en_GB" => "English",
-            "es_ES" => "Spanish",
-            "fr_FR" => "French",
-            "de_DE" => "German",
-            "it_IT" => "Italian",
-            "ja_JP" => "Japanese",
-            "zh_CN" => "Chinese",
-            "ko_KR" => "Korean",
-            "ar_SA" => "Arabic",
-            "nl_NL" => "Dutch",
-            "ru_RU" => "Russian",
-            _ => "the same language as the user's text",
+    async fn suggest_next_words(&self, text: &str, count: usize) -> Result<Vec<String>, String> {
+        // Use only the trailing words as context — it keeps the request fast
+        // for local models and reduces the urge to echo the whole text back.
+        let last_words: Vec<&str> = text.split_whitespace().rev().take(12).collect();
+        let context = last_words.iter().rev().copied().collect::<Vec<_>>().join(" ");
+        if context.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // The language is derived ONLY from the user's text — never from the
+        // dictionary selection or any other setting. If we can name it
+        // confidently we tell the model; otherwise we instruct it to match the
+        // text's language, which it can read directly.
+        let lang_clause = match detect_language(&context) {
+            Some(lang) => format!(
+                "The text is written in {lang}. \
+                 Continue EXCLUSIVELY in {lang}. \
+                 Do NOT translate it or switch to another language."
+            ),
+            None => "Continue EXCLUSIVELY in the SAME language as the text. \
+                     Detect the language from the text itself and keep it. \
+                     Do NOT translate it or switch to another language."
+                .to_string(),
         };
 
-        // Use only the last few words as context — reduces the model's tendency
-        // to echo the full text back as suggestions.
-        let last_words: Vec<&str> = text.split_whitespace().rev().take(10).collect();
-        let context = last_words.iter().rev().copied().collect::<Vec<_>>().join(" ");
-
         let system = format!(
-            "You are a next-word predictor. \
-             Your ONLY job: output {count} NEW words in {lang_name} that continue the sentence.\n\
-             The user wrote: \"{context}\"\n\
-             What comes NEXT? Answer with {count} different options.\n\
+            "You are an autocomplete engine. \
+             Given text that a user is typing, you predict the most likely word(s) or phrase(s) that come NEXT.\n\
+             Complete the user's sentence with something that makes sense in the context of the rest of the sentence.\n\
+             {lang_clause}\n\
+             The user's text so far: \"{context}\"\n\
+             Suggest {count} different continuations (word or phrase).\n\
              RULES:\n\
-             - Output ONLY the new words, one per line.\n\
-             - NEVER repeat or copy words from the user's text.\n\
-             - NEVER output the user's text back.\n\
-             - One option CAN be a short phrase (max 5 words). The rest must be single words.\n\
-             - Make each option different (different meaning or part of speech).\n\
-             - Do NOT use articles, prepositions, conjunctions, pronouns, or auxiliary verbs.\n\
-             - Do NOT use thinking, reasoning, explanations, lists, or markdown.\n\
-             - Do NOT start lines with - or numbers.\n\
-             Example input: \"The cat jumped on the\"\n\
-             Example output (don't use as real output):\n\
-             roof\n\
-             fence\n\
-             chased a mouse"
+             - Output ONLY the suggestions, one per line. No list, numbers, bullets, quotes, or markdown.\n\
+             - Each suggestion must be a grammatically correct continuation of the text \
+             (match gender, number, and tense; articles, prepositions, pronouns, and auxiliary \
+             verbs are perfectly fine when they are the natural next word).\n\
+             - Make the options genuinely different from each other.\n\
+             - At most ONE option may be a short phrase (up to 4 words); the rest must be single words.\n\
+             - Do NOT repeat or copy the user's text back.\n\
+             - Do not repeat previous phrases or words; create only the sequences.\n\
+             - Do NOT add explanations, labels, introductions, or any text other than the suggestions."
         );
-        let prompt = format!("What {count} words come after: \"{context}\"?");
+        let prompt = format!("List the {count} most likely next word or phrase for: \"{context}\"");
         let raw = self.complete_raw(&system, &prompt).await?;
         eprintln!("[plume] ai_suggest raw response: {raw:?}");
 
-        // Collect all words from user's text for dedup
-        let text_lower = text.to_lowercase();
-        let text_words: std::collections::HashSet<&str> = text_lower.split_whitespace().collect();
-
-        let words: Vec<String> = raw
-            .lines()
-            .flat_map(|l| l.split(','))
-            .map(|l| {
-                let mut l = l.trim();
-                // Repeatedly strip leading list markers, digits, dots, and whitespace
-                // Handles patterns like ". ", "1. ", "- ", ". . ", "1. - "
-                loop {
-                    let stripped = l
-                        .trim_start_matches(|c: char| c == '-' || c == '*' || c == '.' || c == ' ');
-                    let stripped = stripped.trim_start_matches(|c: char| c.is_ascii_digit());
-                    let stripped = stripped.trim_start_matches(|c: char| c == '.' || c == ' ');
-                    if stripped.len() == l.len() {
-                        break;
-                    }
-                    l = stripped;
-                }
-                l.trim().trim_end_matches(|c: char| c.is_ascii_punctuation()).to_string()
-            })
-            .filter(|l| !l.is_empty())
-            .map(|l| {
-                // Strip echoed text: if the suggestion starts with any portion
-                // of the user's text, remove that prefix and keep only the new part.
-                let l_lower = l.to_lowercase();
-                let text_lower = text.to_lowercase();
-                if text_lower.contains(&l_lower) {
-                    // The entire suggestion is a substring of the user's text → skip
-                    return String::new();
-                }
-                l
-            })
-            .filter(|l| !l.is_empty())
-            .filter(|l| {
-                let l_lower = l.to_lowercase();
-                let first = l_lower.split_whitespace().next().unwrap_or("");
-                !text_words.contains(first)
-            })
-            .take(count)
-            .collect();
-        Ok(words)
+        Ok(parse_suggestions(&raw, &context, count))
     }
 }
 
@@ -431,39 +565,6 @@ impl LocalProvider {
                 .unwrap_or_default(),
         }
     }
-
-    async fn complete_text(&self, prompt: &str, n_predict: u32, stop: &[&str]) -> Result<String, String> {
-        eprintln!("[plume] complete_text prompt: {prompt}");
-
-        let body = serde_json::json!({
-            "prompt": prompt,
-            "n_predict": n_predict,
-            "temperature": 0.1,
-            "stop": stop,
-        });
-
-        let resp = self
-            .client
-            .post(format!("{}/completion", self.endpoint))
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| format!("request failed: {e}"))?;
-
-        let data: serde_json::Value =
-            resp.json().await.map_err(|e| format!("parse failed: {e}"))?;
-
-        eprintln!("[plume] completion response: {data}");
-
-        let raw = data["content"]
-            .as_str()
-            .or_else(|| data["choices"][0]["text"].as_str())
-            .ok_or_else(|| "no content in response".to_string())?;
-
-        let result = strip_thinking(raw);
-        eprintln!("[plume] complete_text result: {result}");
-        Ok(result)
-    }
 }
 
 #[async_trait]
@@ -496,35 +597,6 @@ impl LlmProvider for LocalProvider {
             resp.json().await.map_err(|e| format!("parse failed: {e}"))?;
 
         extract_content(&data)
-    }
-
-    async fn suggest_next_words(&self, text: &str, count: usize, _lang: &str) -> Result<Vec<String>, String> {
-        let last_words: Vec<&str> = text.split_whitespace().rev().take(10).collect();
-        let context = last_words.iter().rev().copied().collect::<Vec<_>>().join(" ");
-
-        // Few-shot: model sees pattern of "text → next words" and completes
-        let prompt = format!(
-            "The cat jumped on the → roof, fence, table\n\
-             I went to the → store, park, beach\n\
-             {context} →"
-        );
-        let raw = self.complete_text(&prompt, 64, &["\n"]).await?;
-        eprintln!("[plume] ai_suggest raw response: {raw:?}");
-
-        let last_word = text.split_whitespace().last().unwrap_or("").to_lowercase();
-
-        let words: Vec<String> = raw
-            .split([',', '\n'])
-            .map(|s| s.trim().trim_start_matches(|c: char| c == '-' || c == '*' || c == '.' || c == ' ').to_string())
-            .filter(|s| !s.is_empty())
-            .filter(|s| {
-                let s_lower = s.to_lowercase();
-                s_lower != last_word && !last_word.contains(&s_lower)
-            })
-            .take(count)
-            .collect();
-        eprintln!("[plume] ai_suggest result: {words:?}");
-        Ok(words)
     }
 }
 

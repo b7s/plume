@@ -134,6 +134,10 @@ pub struct Config {
     pub resize_debounce_ms: u64,
     #[serde(default = "default_hover_timeout_secs")]
     pub hover_timeout_secs: u64,
+    #[serde(default = "default_hide_during_fullscreen")]
+    pub hide_during_fullscreen: bool,
+    #[serde(default = "default_window_opacity")]
+    pub window_opacity: u8,
 }
 
 fn default_port() -> u16 { 8080 }
@@ -160,6 +164,10 @@ fn default_resize_debounce_ms() -> u64 { 250 }
 
 fn default_hover_timeout_secs() -> u64 { 30 }
 
+fn default_hide_during_fullscreen() -> bool { false }
+
+fn default_window_opacity() -> u8 { 100 }
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -184,6 +192,8 @@ impl Default for Config {
             request_timeout_secs: 30,
             resize_debounce_ms: 250,
             hover_timeout_secs: 30,
+            hide_during_fullscreen: false,
+            window_opacity: 100,
         }
     }
 }

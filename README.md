@@ -57,16 +57,17 @@ Plume supports four backends. Configure yours in **Settings** (gear icon on the 
 
 Uses a bundled `llama-server.exe` to run GGUF models locally. The model file is auto-downloaded from HuggingFace on first use.
 
-| Preset | Size | Quality |
+| Preset | Size | Notes |
 |---|---|---|
-| **Qwen3-0.6B (Q8_0)** | 639 MB | Near-lossless, best for text continuation |
-| Qwen3-0.6B (Q6_K) | 495 MB | Great balance |
-| Qwen3-0.6B (Q4_K_M) | 397 MB | Smallest, good quality |
-| Qwen3-1.7B (Q4_K_M) | ~1.1 GB | Higher capability, larger footprint |
-| Llama 3.2-1B (Q3_K_S) | 642 MB | Multilingual |
-| TinyLlama-1.1B (Q4_K_S) | 640 MB | Well-tested general model |
+| **Qwen3-0.6B (Q8_0)** | 639 MB | Recommended — near-lossless, great for text continuation |
+| Qwen2.5-0.5B (Q8_0) | 507 MB | Smallest, lowest RAM |
+| Llama 3.2-1B (IQ3_M) | 627 MB | Multilingual |
+| Gemma 3-1B (Q4_K_M) | 769 MB | Efficient on CPU |
+| Qwen2.5-1.5B (Q4_K_M) | 940 MB | Higher quality |
+| Qwen3-1.7B (Q4_K_M) | ~1.1 GB | Higher capability |
+| Gemma 2-2B (IQ3_M) | 1.33 GB | Most capable |
 
-Select **Custom...** to type any GGUF filename. Plume auto-resolves download URLs from HuggingFace.
+Select **Custom...** to type any GGUF filename. Built-in presets download from verified HuggingFace URLs; custom filenames auto-resolve from unsloth.
 
 ### Ollama
 

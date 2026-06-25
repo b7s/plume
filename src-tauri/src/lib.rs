@@ -212,25 +212,66 @@ fn toggle_plume(app: AppHandle) {
         } else {
             let _ = window.show();
             let _ = window.set_focus();
-            // Re-apply Mica after show
-            use tauri::window::{Effect, EffectsBuilder};
-            let _ = window.set_effects(EffectsBuilder::new().effect(Effect::Mica).build());
         }
     }
 }
 
+/// Toggle whether the overlay can take keyboard focus.
+///
+/// The overlay is normally `WS_EX_NOACTIVATE` so that popping it up while you
+/// type in another app never steals focus. The trade-off is that a
+/// no-activate window can't receive keystrokes, which makes the in-overlay
+/// textarea untypeable. When the user clicks that textarea we call this with
+/// `activatable = true` to drop the style and bring the window to the
+/// foreground so typing works; we restore the style when focus leaves it.
 #[tauri::command]
-fn set_window_material(app: AppHandle, material: String) {
-    use tauri::window::{Effect, EffectsBuilder};
-    if let Some(window) = app.get_webview_window("plume") {
-        let effect = if material == "acrylic" {
-            Effect::Acrylic
-        } else {
-            Effect::Mica
-        };
-        let _ = window.set_effects(EffectsBuilder::new().effect(effect).build());
+fn set_window_activatable(app: AppHandle, activatable: bool) {
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(window) = app.get_webview_window("plume") {
+            if let Ok(hwnd) = window.hwnd() {
+                use windows::Win32::UI::WindowsAndMessaging::{
+                    GetWindowLongW, SetForegroundWindow, SetWindowLongW, SetWindowPos,
+                    GWL_EXSTYLE, SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
+                    WS_EX_NOACTIVATE,
+                };
+                unsafe {
+                    let ex = GetWindowLongW(hwnd, GWL_EXSTYLE);
+                    let new_ex = if activatable {
+                        ex & !(WS_EX_NOACTIVATE.0 as i32)
+                    } else {
+                        ex | (WS_EX_NOACTIVATE.0 as i32)
+                    };
+                    SetWindowLongW(hwnd, GWL_EXSTYLE, new_ex);
+                    // Flush the new extended style without moving/resizing.
+                    let _ = SetWindowPos(
+                        hwnd,
+                        None,
+                        0,
+                        0,
+                        0,
+                        0,
+                        SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER,
+                    );
+                    if activatable {
+                        let _ = SetForegroundWindow(hwnd);
+                    }
+                }
+            }
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (app, activatable);
     }
 }
+
+/// Set the window opacity (0–100).  WebView2 does not support
+/// SetLayeredWindowAttributes, so the actual opacity is applied via CSS
+/// on the front-end. This command exists so the front-end can notify
+/// the backend of the current value, but it is currently a no-op.
+#[tauri::command]
+fn set_window_opacity(_app: AppHandle, _opacity: u8) {}
 
 #[tauri::command]
 fn on_overlay_ready(app: AppHandle) -> (u64, bool, String) {
@@ -348,11 +389,12 @@ async fn suggest_next_words(app: AppHandle, text: String) -> Result<Vec<String>,
     }
     let cfg = config::load();
     let count = cfg.ai_suggestion_count.max(1);
-    let lang = cfg.dictionary.language.clone();
-    eprintln!("[plume] ai_suggest: count={count} lang={lang} | text={text}");
+    eprintln!("[plume] ai_suggest: count={count} | text={text}");
     let settings = state::load(&app);
     let provider = ai::build_provider(&settings)?;
-    let words = provider.suggest_next_words(&text, count, &lang).await?;
+    // Language is derived from the user's text inside the provider — we
+    // deliberately do NOT pass the dictionary/settings language here.
+    let words = provider.suggest_next_words(&text, count).await?;
     eprintln!("[plume] ai_suggest result: {words:?}");
     Ok(words)
 }
@@ -388,9 +430,50 @@ async fn download_model(app: AppHandle, model_name: String, model_url: String) -
 }
 
 #[tauri::command]
-fn save_config(config: config::Config) -> bool {
+fn save_config(app: AppHandle, config: config::Config) -> bool {
     config::save_config(&config);
+    app.emit("plume:config-updated", config.window_opacity).ok();
+    if let Some(main_win) = app.get_webview_window("main") {
+        let js = format!("windowOpacity = {}; applyOpacity();", config.window_opacity);
+        let _ = main_win.eval(&js);
+    }
     true
+}
+
+/// Restart the local llama-server so it picks up a newly-saved model/port.
+/// Kills the current server (and any orphaned llama-server.exe holding the
+/// port), then loads the model from the current config. No-op for non-local
+/// providers.
+#[tauri::command]
+async fn restart_llama(app: AppHandle) -> Result<String, String> {
+    let cfg = config::load();
+    if cfg.provider != "local" {
+        return Ok("skipped: not local provider".into());
+    }
+    let model_name = cfg.model.clone();
+    let model_url = cfg.model_url.clone();
+    let port = cfg.port;
+
+    eprintln!("[plume] Restarting llama-server with {model_name} on port {port}");
+    llama::kill_all();
+    let _ = app.emit("plume:model-reload", ());
+
+    let (server_path, model_path) =
+        llama::LlamaSetup::ensure_ready(&model_name, &model_url, port, true, true)
+            .await
+            .map_err(|e| format!("model setup failed: {e}"))?;
+
+    let child = llama::LlamaSetup::start_server(port, &model_path, &server_path)
+        .map_err(|e| format!("failed to start server: {e}"))?;
+    if let Ok(mut proc) = llama::LLAMA_PROCESS.lock() {
+        *proc = Some(child);
+    }
+
+    llama::LlamaSetup::wait_ready(port, Duration::from_secs(180))
+        .await
+        .map_err(|e| format!("server didn't become ready: {e}"))?;
+    eprintln!("[plume] llama-server ready with {model_name}");
+    Ok(model_name)
 }
 
 #[tauri::command]
@@ -398,6 +481,7 @@ fn open_settings(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("settings") {
         window.show().map_err(|e| format!("show failed: {e}"))?;
         window.set_focus().map_err(|e| format!("focus failed: {e}"))?;
+        let _ = window.eval("modalSave.disabled = false; modalSave.textContent = 'Save'; loadConfig();");
         Ok(())
     } else {
         Err("settings window not found".into())
@@ -412,12 +496,7 @@ fn close_settings(app: AppHandle) {
 }
 
 fn cleanup_llama() {
-    if let Ok(mut proc) = llama::LLAMA_PROCESS.lock() {
-        if let Some(ref mut child) = *proc {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
-    }
+    llama::kill_all();
 }
 
 pub fn run() {
@@ -437,7 +516,8 @@ pub fn run() {
             accept_text,
             copy_text,
             toggle_plume,
-            set_window_material,
+            set_window_activatable,
+            set_window_opacity,
             on_overlay_ready,
             save_window_position,
             get_config,
@@ -453,16 +533,11 @@ pub fn run() {
             suggest_next_words,
             check_model,
             download_model,
+            restart_llama,
         ])
         .setup(|app| {
             #[cfg(target_os = "windows")]
             force_window_corners_round(app);
-
-            // Explicitly set Mica effect
-            if let Some(window) = app.get_webview_window("plume") {
-                use tauri::window::{Effect, EffectsBuilder};
-                let _ = window.set_effects(EffectsBuilder::new().effect(Effect::Mica).build());
-            }
 
             // WS_EX_NOACTIVATE — clicking Plume never steals focus from the user's app.
             #[cfg(target_os = "windows")]
@@ -546,9 +621,12 @@ pub fn run() {
                 });
             }
 
-            // Only start the local LLM when translation is enabled.
-            // Hunspell spell-checking is instant and doesn't need the LLM.
-            if cfg.provider == "local" && cfg.translation.enabled {
+            // Start the local LLM whenever the user is on the "local" provider.
+            // Both AI next-word suggestions and translation depend on it, so we
+            // must not gate this on translation being enabled — otherwise AI
+            // suggestions silently fail (connection refused) by default.
+            // Hunspell spell-checking is independent and stays instant.
+            if cfg.provider == "local" {
                 let model_name = cfg.model.clone();
                 let model_url = cfg.model_url.clone();
                 let port = cfg.port;
@@ -575,8 +653,6 @@ pub fn run() {
                         Err(e) => eprintln!("[plume] LLM setup failed: {e}"),
                     }
                 });
-            } else if cfg.provider == "local" {
-                eprintln!("[plume] Translation disabled — LLM not started");
             }
 
             let handle = app.handle().clone();

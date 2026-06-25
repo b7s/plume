@@ -3,7 +3,7 @@ use std::sync::{
     Arc, Mutex,
 };
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use uiautomation::{
     UIAutomation, UIElement,
     patterns::{UITextPattern, UIValuePattern},
@@ -44,10 +44,14 @@ struct CaptureState {
     last_full_text: String,
     /// HWND of the last focused control — detects context switches.
     last_hwnd: isize,
-    /// Timestamp of the last text change — used for debounce.
+    /// Timestamp of the last text *change* — used for debounce (wait-after-pause).
     last_change: Instant,
+    /// Timestamp of the last suggestion *fire* — used for throttle (rate-limit mid-typing).
+    last_fire: Instant,
     /// Whether an AI request is currently in flight — prevents overlapping calls.
     busy: AtomicBool,
+    /// True after a paste / large jump — suppress suggestions until real typing resumes.
+    suppress: bool,
 }
 
 pub fn start(app: AppHandle) {
@@ -64,7 +68,9 @@ pub fn start(app: AppHandle) {
         last_full_text: String::new(),
         last_hwnd: 0,
         last_change: Instant::now() - Duration::from_secs(60),
+        last_fire: Instant::now() - Duration::from_secs(60),
         busy: AtomicBool::new(false),
+        suppress: false,
     }));
 
     let plume_pid = std::process::id();
@@ -72,6 +78,16 @@ pub fn start(app: AppHandle) {
     loop {
         let cfg = config::load();
         std::thread::sleep(Duration::from_millis(cfg.poll_interval_ms));
+
+        // Auto-hide when a fullscreen game or screen-sharing session is active
+        if cfg.hide_during_fullscreen && is_fullscreen_active() {
+            if let Some(window) = app.get_webview_window("plume") {
+                if window.is_visible().unwrap_or(false) {
+                    let _ = window.hide();
+                }
+            }
+            continue;
+        }
 
         if let Ok(focused) = automation.get_focused_element() {
             // Skip Plume's own window — typing in the textarea should not
@@ -138,22 +154,27 @@ fn read_text(element: &UIElement) -> Option<String> {
 fn sanitize_text(text: &str) -> String {
     text.chars()
         .filter(|c| {
-            // Keep printable chars, common whitespace, and newlines
-            !c.is_control() || *c == '\n' || *c == '\r' || *c == '\t'
+            // Only strip ASCII control chars (0x00-0x1F except whitespace),
+            // not Unicode control-class chars which include legitimate marks
+            // used in Arabic, Indic, emoji sequences, etc.
+            if c.is_ascii_control() {
+                *c == '\n' || *c == '\r' || *c == '\t'
+            } else {
+                true
+            }
         })
         .collect::<String>()
-        .replace('\u{200b}', "")  // zero-width space
-        .replace('\u{200d}', "")  // zero-width joiner
-        .replace('\u{feff}', "")  // BOM / zero-width no-break space
+        .replace('\u{200b}', "")
+        .replace('\u{200d}', "")
+        .replace('\u{feff}', "")
 }
 
 fn extract_word(text: &str, min_len: usize) -> Option<String> {
     let word = text
         .split_whitespace()
-        .last()?
-        .trim_end_matches(|c: char| c.is_ascii_punctuation());
+        .last()?;
 
-    if word.len() >= min_len {
+    if word.chars().count() >= min_len {
         Some(word.to_lowercase())
     } else {
         None
@@ -190,29 +211,34 @@ fn handle_text(
             guard.last_full_text = compare_text.clone();
             guard.last_word = String::new();
             guard.last_change = now;
+            guard.last_fire = now;
+            guard.suppress = false;
             return;
         }
 
-        let old_len = guard.last_full_text.len();
-        let is_prefix = compare_text.starts_with(guard.last_full_text.as_str());
+        let prev = guard.last_full_text.clone();
+        let changed = compare_text != prev;
 
-        // Always update last_full_text so next poll compares against current text
-        guard.last_full_text = compare_text.clone();
+        if changed {
+            let is_prefix = compare_text.starts_with(prev.as_str());
+            // Use char count, not byte count — accented chars are multi-byte
+            // and a single keystroke (e.g. dead-key + letter) adds 2-3 bytes
+            // but only 1 character.
+            let added_chars = compare_text.chars().count().saturating_sub(prev.chars().count());
+            guard.last_full_text = compare_text.clone();
+            guard.last_change = now;
 
-        // Text didn't grow → not typing (deletion, selection, cursor move)
-        if compare_text.len() <= old_len {
-            return;
+            if !is_prefix {
+                guard.last_word = String::new();
+                guard.suppress = added_chars > cfg.max_added_chars;
+            } else if added_chars > cfg.max_added_chars {
+                guard.suppress = true;
+            } else {
+                guard.suppress = false;
+            }
         }
 
-        // Text grew but old text isn't a prefix → content replaced (navigation, paste-over)
-        // Still extract the word, just reset the dedup so we can suggest for the new context
-        if !is_prefix {
-            guard.last_word = String::new();
-        }
-
-        // Large jump → paste, not typing
-        let added = compare_text.len() - old_len;
-        if added > cfg.max_added_chars {
+        if guard.suppress {
             return;
         }
 
@@ -221,24 +247,31 @@ fn handle_text(
             None => return,
         };
 
-        // Same word as last suggestion → skip
         if guard.last_word == word {
             return;
         }
 
-        // Don't fire if a suggestion is already in flight — but still update word
-        // so the next poll after busy clears can fire if the word changed again
         if guard.busy.load(Ordering::Relaxed) {
             return;
         }
 
-        let elapsed = now.duration_since(guard.last_change);
-        if elapsed < Duration::from_millis(cfg.debounce_ms) {
+        let since_change = now.duration_since(guard.last_change);
+        let since_fire = now.duration_since(guard.last_fire);
+
+        // THROTTLE during active typing: allow at most one fire per debounce_ms.
+        // DEBOUNCE after pause: once typing goes quiet, fire the final word.
+        //
+        // "Text is changing" = last_change is recent → throttle.
+        // "Text went quiet"  = last_change is stale   → debounce elapsed → fire.
+        let text_changing = since_change < Duration::from_millis(cfg.debounce_ms);
+        let too_soon = since_fire < Duration::from_millis(cfg.debounce_ms);
+
+        if text_changing && too_soon {
             return;
         }
 
         guard.last_word = word.clone();
-        guard.last_change = now;
+        guard.last_fire = now;
         guard.busy.store(true, Ordering::Relaxed);
         (true, word, text.clone())
     };
@@ -286,4 +319,28 @@ async fn run_suggestion(app: &AppHandle, word: &str, full_text: &str, window_tit
 
     let _ = app.emit("plume:suggestions", payload);
     Ok(())
+}
+
+/// Returns `true` when a fullscreen Direct3D app (game) or presentation mode
+/// (screen sharing, slideshow) is active on Windows 10+.
+///
+/// Uses `SHQueryUserNotificationState` — the same API Windows uses for Game
+/// Bar and toast suppression.
+#[cfg(target_os = "windows")]
+fn is_fullscreen_active() -> bool {
+    use windows::Win32::UI::Shell::SHQueryUserNotificationState;
+
+    unsafe {
+        if let Ok(state) = SHQueryUserNotificationState() {
+            // 2 = QUNS_RUNNING_D3D_FULL_SCREEN, 3 = QUNS_PRESENTATION_MODE
+            state.0 == 2 || state.0 == 3
+        } else {
+            false
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn is_fullscreen_active() -> bool {
+    false
 }

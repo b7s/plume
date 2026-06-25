@@ -16,15 +16,28 @@ interface Config {
   suggestion_count: number;
   ai_suggestion_count: number;
   ai_suggestion_delay: number;
+  hide_during_fullscreen: boolean;
+  window_opacity: number;
 }
 
-const MODEL_PRESETS_LOCAL: [string, string][] = [
-  ["Qwen3-0.6B-Q4_K_M.gguf", "Qwen3-0.6B (Q4_K_M, 397MB)"],
-  ["Qwen3-0.6B-Q6_K.gguf", "Qwen3-0.6B (Q6_K, 495MB)"],
-  ["Qwen3-0.6B-Q8_0.gguf", "Qwen3-0.6B (Q8_0, 639MB) - Best quality"],
-  ["Qwen3-1.7B-Q4_K_M.gguf", "Qwen3-1.7B (Q4_K_M, ~1.1GB)"],
-  ["Llama-3.2-1B-Instruct-Q3_K_S.gguf", "Llama 3.2-1B (Q3_K_S, 642MB)"],
-  ["TinyLlama-1.1B-Chat-v1.0-Q4_K_S.gguf", "TinyLlama-1.1B (Q4_K_S, 640MB)"],
+// [GGUF filename, label, download URL]
+// The download URL is verified at build time. An empty URL means the backend
+// auto-resolves the HuggingFace repo from the filename (unsloth fallback).
+const MODEL_PRESETS_LOCAL: [string, string, string][] = [
+  ["Qwen2.5-0.5B-Instruct-Q8_0.gguf", "Qwen2.5-0.5B (Q8_0, 507MB) — smallest, low RAM",
+    "https://huggingface.co/bartowski/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/Qwen2.5-0.5B-Instruct-Q8_0.gguf"],
+  ["Qwen3-0.6B-Q8_0.gguf", "Qwen3-0.6B (Q8_0, 639MB) — recommended",
+    ""],
+  ["Llama-3.2-1B-Instruct-IQ3_M.gguf", "Llama 3.2-1B (IQ3_M, 627MB) — multilingual",
+    "https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-IQ3_M.gguf"],
+  ["google_gemma-3-1b-it-Q4_K_M.gguf", "Gemma 3-1B (Q4_K_M, 769MB) — efficient on CPU",
+    "https://huggingface.co/bartowski/google_gemma-3-1b-it-GGUF/resolve/main/google_gemma-3-1b-it-Q4_K_M.gguf"],
+  ["Qwen2.5-1.5B-Instruct-Q4_K_M.gguf", "Qwen2.5-1.5B (Q4_K_M, 940MB) — higher quality",
+    "https://huggingface.co/bartowski/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf"],
+  ["Qwen3-1.7B-Q4_K_M.gguf", "Qwen3-1.7B (Q4_K_M, ~1.1GB)",
+    ""],
+  ["gemma-2-2b-it-IQ3_M.gguf", "Gemma 2-2B (IQ3_M, 1.33GB) — most capable",
+    "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-IQ3_M.gguf"],
 ];
 
 const MODEL_PRESETS_OLLAMA: [string, string][] = [
@@ -61,6 +74,9 @@ const TRANSLATION_LANGS: [string, string][] = [
 ];
 
 const root = document.getElementById("root")!;
+
+// Disable the browser/webview right-click context menu app-wide.
+document.addEventListener("contextmenu", (e) => e.preventDefault());
 
 root.innerHTML = `
   <div class="settings">
@@ -155,6 +171,18 @@ root.innerHTML = `
         <span>Idle Timeout (seconds)</span>
         <input id="cfg-idle-timeout" class="cfg-input" type="number" min="1" max="60" placeholder="6" />
       </label>
+      <div class="cfg-section">General</div>
+      <label class="cfg-field cfg-check">
+        <input id="cfg-hide-fullscreen" type="checkbox" />
+        <span>Hide during fullscreen / presentation (games, screen sharing)</span>
+      </label>
+      <label class="cfg-field">
+        <span>Window Opacity (inactive)</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <input type="range" min="10" max="100" value="100" class="cfg-input" id="cfg-window-opacity" style="flex:1" />
+          <span id="cfg-window-opacity-value" style="font-size:12px;min-width:28px;text-align:right;">100%</span>
+        </div>
+      </label>
       <div class="cfg-section">Translation</div>
       <label class="cfg-field cfg-check">
         <input id="cfg-tr-enabled" type="checkbox" />
@@ -193,6 +221,9 @@ const cfgSuggestionCount = document.getElementById("cfg-suggestion-count") as HT
 const cfgAiSuggestionCount = document.getElementById("cfg-ai-suggestion-count") as HTMLInputElement;
 const cfgAiSuggestionDelay = document.getElementById("cfg-ai-suggestion-delay") as HTMLInputElement;
 const cfgIdleTimeout = document.getElementById("cfg-idle-timeout") as HTMLInputElement;
+const cfgHideFullscreen = document.getElementById("cfg-hide-fullscreen") as HTMLInputElement;
+const cfgWindowOpacity = document.getElementById("cfg-window-opacity") as HTMLInputElement;
+const cfgWindowOpacityValue = document.getElementById("cfg-window-opacity-value") as HTMLSpanElement;
 const cfgTrEnabled = document.getElementById("cfg-tr-enabled") as HTMLInputElement;
 const cfgTrLang = document.getElementById("cfg-tr-lang") as HTMLSelectElement;
 const modalCancel = document.getElementById("modal-cancel") as HTMLButtonElement;
@@ -205,12 +236,16 @@ for (const [code, name] of TRANSLATION_LANGS) {
   cfgTrLang.appendChild(opt);
 }
 
+cfgWindowOpacity.addEventListener("input", () => {
+  cfgWindowOpacityValue.textContent = cfgWindowOpacity.value + "%";
+});
+
 function showCustomInput(select: HTMLSelectElement, customInput: HTMLInputElement) {
   const isCustom = select.value === "__custom__";
   customInput.classList.toggle("hidden", !isCustom);
 }
 
-function setupSelect(select: HTMLSelectElement, customInput: HTMLInputElement, presets: [string, string][]) {
+function setupSelect(select: HTMLSelectElement, customInput: HTMLInputElement, presets: [string, ...string[]][]) {
   select.innerHTML = "";
   for (const [value, label] of presets) {
     const opt = document.createElement("option");
@@ -278,7 +313,7 @@ function setModelValue(provider: string, model: string) {
   }
 }
 
-function populateSelectDirect(sel: HTMLSelectElement, presets: [string, string][], selected: string) {
+function populateSelectDirect(sel: HTMLSelectElement, presets: [string, ...string[]][], selected: string) {
   sel.value = presets.some(([v]) => v === selected) ? selected : "__custom__";
 }
 
@@ -286,7 +321,9 @@ async function loadConfig() {
   const cfg = await invoke<Config>("get_config");
   cfgProvider.value = cfg.provider || "local";
   setModelValue(cfgProvider.value, cfg.model || "");
-  cfgModelUrl.value = cfg.model_url || "";
+  // Prefer the saved URL; otherwise use the preset's verified URL (empty for
+  // presets that auto-resolve). This keeps the field correct for presets.
+  cfgModelUrl.value = cfg.model_url || (cfg.provider === "local" ? localModelUrl(cfg.model || "") : "");
   cfgEndpointLocal.value = cfg.endpoint || "http://127.0.0.1:8080";
   cfgEndpointOllama.value = cfg.endpoint || "http://127.0.0.1:11434";
   cfgEndpointOpenai.value = cfg.endpoint || "https://api.openai.com/v1/chat/completions";
@@ -298,6 +335,9 @@ async function loadConfig() {
   cfgAiSuggestionCount.value = String(cfg.ai_suggestion_count ?? 3);
   cfgAiSuggestionDelay.value = String(cfg.ai_suggestion_delay ?? 800);
   cfgIdleTimeout.value = String(cfg.idle_timeout ?? 6);
+  cfgHideFullscreen.checked = !!cfg.hide_during_fullscreen;
+  cfgWindowOpacity.value = String(cfg.window_opacity ?? 100);
+  cfgWindowOpacityValue.textContent = cfgWindowOpacity.value + "%";
   cfgTrEnabled.checked = !!cfg.translation?.enabled;
   cfgTrLang.value = cfg.translation?.language || "portuguese";
 
@@ -318,8 +358,20 @@ loadConfig().catch(console.error);
 
 let isDownloading = false;
 
+/// Resolve the verified HuggingFace download URL for a local preset filename.
+/// Returns "" for presets that rely on the backend's filename-based resolution.
+function localModelUrl(filename: string): string {
+  return MODEL_PRESETS_LOCAL.find(([f]) => f === filename)?.[2] ?? "";
+}
+
 async function handleLocalModelChange() {
   if (isDownloading) return;
+  // When a built-in preset is chosen, sync the Model URL field to its known
+  // URL so the download hits the right repo. For "Custom..." leave the field
+  // untouched so the user can type their own URL (or leave it empty).
+  if (cfgModelLocal.value !== "__custom__") {
+    cfgModelUrl.value = localModelUrl(getModelValue("local"));
+  }
   const model = getModelValue("local");
   if (!model) return;
   const exists = await invoke<boolean>("check_model", { modelName: model });
@@ -371,21 +423,41 @@ modalSave.onclick = async () => {
     suggestion_count: parseInt(cfgSuggestionCount.value) || 6,
     ai_suggestion_count: parseInt(cfgAiSuggestionCount.value) || 3,
     ai_suggestion_delay: parseInt(cfgAiSuggestionDelay.value) || 800,
+    hide_during_fullscreen: cfgHideFullscreen.checked,
+    window_opacity: parseInt(cfgWindowOpacity.value) || 100,
   };
-
-  modalSave.disabled = true;
 
   try {
     if (provider === "local") {
       const exists = await invoke<boolean>("check_model", { modelName: model });
       if (!exists) {
+        modalSave.disabled = true;
         modalSave.textContent = "Downloading model… (this may take a while)";
         await invoke("download_model", { modelName: model, modelUrl: cfgModelUrl.value });
+        modalSave.disabled = false;
       }
     }
 
     modalSave.textContent = "Saving…";
     await invoke("save_config", { config: newCfg });
+
+    // Reload the local server if the model, port, or provider changed —
+    // otherwise llama-server keeps serving the previous model and the new one
+    // never takes effect until the app is fully restarted.
+    const portVal = parseInt(cfgPort.value) || 8080;
+    const becameLocal = provider === "local" && (existing.provider || "") !== "local";
+    const localModelChanged =
+      provider === "local" &&
+      (existing.provider || "") === "local" &&
+      (existing.model !== model || (existing.port ?? 8080) !== portVal);
+    if (becameLocal || localModelChanged) {
+      modalSave.textContent = "Reloading model…";
+      try {
+        await invoke<string>("restart_llama");
+      } catch (e) {
+        console.error("restart_llama failed:", e);
+      }
+    }
 
     if (cfgDictLang.value !== existing.dictionary?.language) {
       modalSave.textContent = "Downloading dictionary…";
