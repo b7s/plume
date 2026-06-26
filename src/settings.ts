@@ -1,5 +1,6 @@
 import "./settings.css";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 interface Config {
   provider: string;
@@ -20,24 +21,26 @@ interface Config {
   window_opacity: number;
 }
 
-// [GGUF filename, label, download URL]
+// [GGUF filename, group, label, download URL]
 // The download URL is verified at build time. An empty URL means the backend
 // auto-resolves the HuggingFace repo from the filename (unsloth fallback).
-const MODEL_PRESETS_LOCAL: [string, string, string][] = [
-  ["Qwen2.5-0.5B-Instruct-Q8_0.gguf", "Qwen2.5-0.5B (Q8_0, 507MB) — smallest, low RAM",
+const MODEL_PRESETS_LOCAL: [string, string, string, string][] = [
+  ["Qwen2.5-0.5B-Instruct-Q8_0.gguf", "Qwen", "Qwen2.5-0.5B (Q8_0, 507MB) — smallest, low RAM",
     "https://huggingface.co/bartowski/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/Qwen2.5-0.5B-Instruct-Q8_0.gguf"],
-  ["Qwen3-0.6B-Q8_0.gguf", "Qwen3-0.6B (Q8_0, 639MB) — recommended",
+  ["Qwen3-0.6B-Q8_0.gguf", "Qwen", "Qwen3-0.6B (Q8_0, 639MB) — recommended",
     ""],
-  ["Llama-3.2-1B-Instruct-IQ3_M.gguf", "Llama 3.2-1B (IQ3_M, 627MB) — multilingual",
-    "https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-IQ3_M.gguf"],
-  ["google_gemma-3-1b-it-Q4_K_M.gguf", "Gemma 3-1B (Q4_K_M, 769MB) — efficient on CPU",
-    "https://huggingface.co/bartowski/google_gemma-3-1b-it-GGUF/resolve/main/google_gemma-3-1b-it-Q4_K_M.gguf"],
-  ["Qwen2.5-1.5B-Instruct-Q4_K_M.gguf", "Qwen2.5-1.5B (Q4_K_M, 940MB) — higher quality",
+  ["Qwen2.5-1.5B-Instruct-Q4_K_M.gguf", "Qwen", "Qwen2.5-1.5B (Q4_K_M, 940MB) — good quality",
     "https://huggingface.co/bartowski/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf"],
-  ["Qwen3-1.7B-Q4_K_M.gguf", "Qwen3-1.7B (Q4_K_M, ~1.1GB)",
+  ["Qwen3-1.7B-Q4_K_M.gguf", "Qwen", "Qwen3-1.7B (Q4_K_M, ~1.1GB) — better quality",
     ""],
-  ["gemma-2-2b-it-IQ3_M.gguf", "Gemma 2-2B (IQ3_M, 1.33GB) — most capable",
+  ["Llama-3.2-1B-Instruct-IQ3_M.gguf", "Llama", "Llama 3.2-1B (IQ3_M, 627MB) — multilingual",
+    "https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-IQ3_M.gguf"],
+  ["google_gemma-3-1b-it-Q4_K_M.gguf", "Gemma", "Gemma 3-1B (Q4_K_M, 769MB) — efficient on CPU",
+    "https://huggingface.co/bartowski/google_gemma-3-1b-it-GGUF/resolve/main/google_gemma-3-1b-it-Q4_K_M.gguf"],
+  ["gemma-2-2b-it-IQ3_M.gguf", "Gemma", "Gemma 2-2B (IQ3_M, 1.33GB) — most capable",
     "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-IQ3_M.gguf"],
+  ["gemma-4-E2B-it-UD-IQ2_M.gguf", "Gemma", "Gemma 4 E2B (UD-IQ2_M, 2.29GB) — most capable, 128k context",
+    "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-UD-IQ2_M.gguf"],
 ];
 
 const MODEL_PRESETS_OLLAMA: [string, string][] = [
@@ -52,8 +55,6 @@ const MODEL_PRESETS_OLLAMA: [string, string][] = [
 const MODEL_PRESETS_OPENAI: [string, string][] = [
   ["gpt-5.4-nano", "GPT-5.4 Nano — $0.20/$1.25"],
   ["gpt-5.4-mini", "GPT-5.4 Mini — $0.75/$4.50"],
-  ["gpt-4.1-mini", "GPT-4.1 Mini — $0.40/$1.60"],
-  ["gpt-4o-mini", "GPT-4o Mini — $0.15/$0.60"],
   ["gpt-5.5", "GPT-5.5 — $5/$30"],
   ["gpt-5.5-pro", "GPT-5.5 Pro — $30/$180"],
 ];
@@ -261,7 +262,31 @@ function setupSelect(select: HTMLSelectElement, customInput: HTMLInputElement, p
   select.addEventListener("change", () => showCustomInput(select, customInput));
 }
 
-setupSelect(cfgModelLocal, cfgModelLocalCustom, MODEL_PRESETS_LOCAL);
+function setupGroupedSelect(select: HTMLSelectElement, customInput: HTMLInputElement, presets: [string, string, string, string][]) {
+  select.innerHTML = "";
+  const groups = new Map<string, HTMLOptGroupElement>();
+  for (const [value, group, label] of presets) {
+    let optgroup = groups.get(group);
+    if (!optgroup) {
+      optgroup = document.createElement("optgroup");
+      optgroup.label = group;
+      groups.set(group, optgroup);
+      select.appendChild(optgroup);
+    }
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = label;
+    optgroup.appendChild(opt);
+  }
+  const customOpt = document.createElement("option");
+  customOpt.value = "__custom__";
+  customOpt.textContent = "Custom...";
+  select.appendChild(customOpt);
+
+  select.addEventListener("change", () => showCustomInput(select, customInput));
+}
+
+setupGroupedSelect(cfgModelLocal, cfgModelLocalCustom, MODEL_PRESETS_LOCAL);
 setupSelect(cfgModelOllama, cfgModelOllamaCustom, MODEL_PRESETS_OLLAMA);
 setupSelect(cfgModelOpenai, cfgModelOpenaiCustom, MODEL_PRESETS_OPENAI);
 
@@ -361,7 +386,7 @@ let isDownloading = false;
 /// Resolve the verified HuggingFace download URL for a local preset filename.
 /// Returns "" for presets that rely on the backend's filename-based resolution.
 function localModelUrl(filename: string): string {
-  return MODEL_PRESETS_LOCAL.find(([f]) => f === filename)?.[2] ?? "";
+  return MODEL_PRESETS_LOCAL.find(([f]) => f === filename)?.[3] ?? "";
 }
 
 async function handleLocalModelChange() {
@@ -375,20 +400,24 @@ async function handleLocalModelChange() {
   const model = getModelValue("local");
   if (!model) return;
   const exists = await invoke<boolean>("check_model", { modelName: model });
-  if (!exists) {
-    isDownloading = true;
-    modalSave.disabled = true;
-    modalSave.textContent = "Downloading model… (this may take a while)";
-    try {
-      await invoke("download_model", { modelName: model, modelUrl: cfgModelUrl.value });
-    } catch (e) {
-      console.error(e);
-    } finally {
-      isDownloading = false;
-      modalSave.disabled = false;
-      modalSave.textContent = "Save";
+    if (!exists) {
+      isDownloading = true;
+      modalSave.disabled = true;
+      modalSave.textContent = "Downloading… 0%";
+      const unlisten = await listen<number>("plume:model-download-progress", (event) => {
+        modalSave.textContent = `Downloading… ${event.payload}%`;
+      });
+      try {
+        await invoke("download_model", { modelName: model, modelUrl: cfgModelUrl.value });
+      } catch (e) {
+        console.error(e);
+      } finally {
+        unlisten();
+        isDownloading = false;
+        modalSave.disabled = false;
+        modalSave.textContent = "Save";
+      }
     }
-  }
 }
 
 cfgModelLocal.addEventListener("change", handleLocalModelChange);
@@ -432,8 +461,12 @@ modalSave.onclick = async () => {
       const exists = await invoke<boolean>("check_model", { modelName: model });
       if (!exists) {
         modalSave.disabled = true;
-        modalSave.textContent = "Downloading model… (this may take a while)";
+        modalSave.textContent = "Downloading… 0%";
+        const unlisten = await listen<number>("plume:model-download-progress", (event) => {
+          modalSave.textContent = `Downloading… ${event.payload}%`;
+        });
         await invoke("download_model", { modelName: model, modelUrl: cfgModelUrl.value });
+        unlisten();
         modalSave.disabled = false;
       }
     }

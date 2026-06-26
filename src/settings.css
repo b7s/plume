@@ -78,6 +78,11 @@ body {
   transition: border-color 0.15s;
 }
 
+select optgroup {
+  font-style: normal;
+  font-weight: 600;
+}
+
 .cfg-input:focus {
   border-color: rgba(0, 120, 212, 0.6);
 }
@@ -142,6 +147,20 @@ body {
     color: #1b1b1b;
   }
 
+  select {
+    color-scheme: light;
+  }
+
+  select optgroup {
+    background: #fff;
+    color: #666;
+  }
+
+  select option {
+    background: #fff;
+    color: #1b1b1b;
+  }
+
   .cfg-input {
     background: rgba(0, 0, 0, 0.03);
     color: #1b1b1b;
@@ -160,15 +179,24 @@ body {
     color: #e0e0e0;
   }
 
+  select {
+    color-scheme: dark;
+  }
+
+  select optgroup {
+    background: #1f1f1f;
+    color: #888;
+  }
+
+  select option {
+    background: #1f1f1f;
+    color: #e0e0e0;
+  }
+
   .cfg-input {
     background: rgba(255, 255, 255, 0.06);
     color: #e0e0e0;
     color-scheme: dark;
-  }
-
-  .cfg-input option {
-    background: #1f1f1f;
-    color: #e0e0e0;
   }
 
   .modal-btn-secondary {

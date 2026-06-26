@@ -5,6 +5,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use futures_util::StreamExt;
+use tauri::{AppHandle, Emitter};
 
 const GITHUB_REPO: &str = "ggml-org/llama.cpp";
 const USER_AGENT: &str = "Plume/0.1";
@@ -196,7 +197,7 @@ impl LlamaSetup {
         self.model_path(name).exists()
     }
 
-    pub async fn download_model(&self, name: &str, url: &str) -> Result<PathBuf, String> {
+    pub async fn download_model(&self, app: &AppHandle, name: &str, url: &str) -> Result<PathBuf, String> {
         let path = self.model_path(name);
         if path.exists() {
             return Ok(path);
@@ -227,20 +228,18 @@ impl LlamaSetup {
         let mut downloaded: u64 = 0;
         let mut file = std::fs::File::create(&path).map_err(|e| format!("create: {e}"))?;
         let mut stream = response.bytes_stream();
-        let mut last_print = 0u64;
+        let mut last_pct = 0u32;
 
         while let Some(chunk) = stream.next().await {
             let chunk = chunk.map_err(|e| format!("stream: {e}"))?;
             file.write_all(&chunk).map_err(|e| format!("write: {e}"))?;
             downloaded += chunk.len() as u64;
-            if total > 0 && downloaded - last_print > 50 * 1024 * 1024 {
-                let pct = (downloaded as f64 / total as f64) * 100.0;
-                eprintln!(
-                    "[plume] Model: {pct:.0}% ({}/{} MB)",
-                    downloaded / (1024 * 1024),
-                    total / (1024 * 1024)
-                );
-                last_print = downloaded;
+            if total > 0 {
+                let pct = ((downloaded as f64 / total as f64) * 100.0) as u32;
+                if pct > last_pct {
+                    last_pct = pct;
+                    let _ = app.emit("plume:model-download-progress", pct);
+                }
             }
         }
 
@@ -290,6 +289,7 @@ impl LlamaSetup {
     }
 
     pub async fn ensure_ready(
+        app: &AppHandle,
         model_name: &str,
         model_url: &str,
         _port: u16,
@@ -312,7 +312,7 @@ impl LlamaSetup {
             setup.model_path(model_name)
         } else if download_model {
             eprintln!("[plume] Model {model_name} not found — downloading...");
-            setup.download_model(model_name, model_url).await?;
+            setup.download_model(app, model_name, model_url).await?;
             setup.model_path(model_name)
         } else {
             return Err("model not found and auto-download disabled".into());

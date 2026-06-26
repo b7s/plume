@@ -408,7 +408,7 @@ async fn download_model(app: AppHandle, model_name: String, model_url: String) -
 
     eprintln!("[plume] Downloading model: {model_name}");
     app.emit("plume:model-download-start", &model_name).ok();
-    let result = llama.download_model(&model_name, &model_url).await;
+    let result = llama.download_model(&app, &model_name, &model_url).await;
     match result {
         Ok(path) => {
             app.emit("plume:model-download-done", &model_name).ok();
@@ -451,7 +451,7 @@ async fn restart_llama(app: AppHandle) -> Result<String, String> {
     let _ = app.emit("plume:model-reload", ());
 
     let (server_path, model_path) =
-        llama::LlamaSetup::ensure_ready(&model_name, &model_url, port, true, true)
+        llama::LlamaSetup::ensure_ready(&app, &model_name, &model_url, port, true, true)
             .await
             .map_err(|e| format!("model setup failed: {e}"))?;
 
@@ -622,9 +622,10 @@ pub fn run() {
                 let model_name = cfg.model.clone();
                 let model_url = cfg.model_url.clone();
                 let port = cfg.port;
+                let app_handle = app.handle().clone();
 
                 tauri::async_runtime::spawn(async move {
-                    match llama::LlamaSetup::ensure_ready(&model_name, &model_url, port, true, true).await {
+                    match llama::LlamaSetup::ensure_ready(&app_handle, &model_name, &model_url, port, true, true).await {
                         Ok((server_path, model_path)) => {
                             eprintln!("[plume] Starting llama-server...");
                             match llama::LlamaSetup::start_server(port, &model_path, &server_path)

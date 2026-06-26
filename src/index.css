@@ -429,6 +429,20 @@ body {
 @media (prefers-color-scheme: light) {
   body { color-scheme: light; }
 
+  select {
+    color-scheme: light;
+  }
+
+  select optgroup {
+    background: #fff;
+    color: #666;
+  }
+
+  select option {
+    background: #fff;
+    color: #1b1b1b;
+  }
+
   .chip-wrap {
     background: rgba(0, 0, 0, 0.05);
   }
@@ -475,12 +489,6 @@ body {
   .tr-lang {
     color: #1b1b1b;
     background: rgba(0, 0, 0, 0.04);
-    color-scheme: light;
-  }
-
-  .tr-lang option {
-    background: #ffffff;
-    color: #1b1b1b;
   }
 
   .tr-btn {
@@ -508,18 +516,26 @@ body {
   .tr-action {
     color: #1b1b1b;
     background: rgba(0, 0, 0, 0.04);
-    color-scheme: light;
-  }
-
-  .tr-action option {
-    background: #ffffff;
-    color: #1b1b1b;
   }
 }
 
 /* ========== DARK THEME ========== */
 @media (prefers-color-scheme: dark) {
   body { color-scheme: dark; }
+
+  select {
+    color-scheme: dark;
+  }
+
+  select optgroup {
+    background: #1f1f1f;
+    color: #888;
+  }
+
+  select option {
+    background: #1f1f1f;
+    color: #e0e0e0;
+  }
 
   .chip-wrap {
     background: rgba(255, 255, 255, 0.07);
@@ -567,12 +583,6 @@ body {
   .tr-lang {
     color: #e0e0e0;
     background: rgba(255, 255, 255, 0.06);
-    color-scheme: dark;
-  }
-
-  .tr-lang option {
-    background: #1f1f1f;
-    color: #e0e0e0;
   }
 
   .tr-btn {
@@ -600,11 +610,5 @@ body {
   .tr-action {
     color: #e0e0e0;
     background: rgba(255, 255, 255, 0.06);
-    color-scheme: dark;
-  }
-
-  .tr-action option {
-    background: #1f1f1f;
-    color: #e0e0e0;
   }
 }
