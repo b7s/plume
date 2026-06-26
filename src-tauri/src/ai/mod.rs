@@ -232,7 +232,11 @@ fn extract_content(data: &serde_json::Value) -> Result<String, String> {
             data["choices"][0]["message"]["reasoning_content"]
                 .as_str()
         })
-        .ok_or_else(|| "no content in response".to_string())?;
+        .ok_or_else(|| {
+            let finish = data["choices"][0]["finish_reason"].as_str().unwrap_or("unknown");
+            let model = data["model"].as_str().unwrap_or("?");
+            format!("model {model} returned empty content (finish_reason={finish}). The model may not have a matching chat template or the prompt was rejected.")
+        })?;
 
     // Strip <think>...</think> blocks
     let mut s = content.to_string();
@@ -249,7 +253,7 @@ fn extract_content(data: &serde_json::Value) -> Result<String, String> {
 
 #[async_trait]
 pub trait LlmProvider: Send + Sync {
-    async fn complete_raw(&self, system: &str, prompt: &str) -> Result<String, String>;
+    async fn complete_raw(&self, system: &str, prompt: &str, max_tokens: u32) -> Result<String, String>;
 
     async fn translate_text(&self, text: &str, language: &str) -> Result<String, String> {
         let target = capitalize(language);
@@ -270,7 +274,7 @@ pub trait LlmProvider: Send + Sync {
             )
         };
         let prompt = format!("Translate to {target}:\n\n{text}");
-        self.complete_raw(&system, &prompt).await
+        self.complete_raw(&system, &prompt, 300).await
     }
 
     async fn explain_text(&self, text: &str) -> Result<String, String> {
@@ -280,7 +284,7 @@ pub trait LlmProvider: Send + Sync {
                       Output ONLY the explanation — no thinking, no repetition of the original."
             .to_string();
         let prompt = format!("Explain this text:\n\n{text}\n\nExplanation:");
-        self.complete_raw(&system, &prompt).await
+        self.complete_raw(&system, &prompt, 400).await
     }
 
     async fn process_text(&self, text: &str, action: &str) -> Result<String, String> {
@@ -390,7 +394,7 @@ pub trait LlmProvider: Send + Sync {
             ),
             _ => return Err(format!("unknown action: {action}")),
         };
-        self.complete_raw(&system, &prompt).await
+        self.complete_raw(&system, &prompt, 500).await
     }
 
     async fn suggest_next_words(&self, text: &str, count: usize) -> Result<Vec<String>, String> {
@@ -437,7 +441,7 @@ pub trait LlmProvider: Send + Sync {
              - Do NOT add explanations, labels, introductions, or any text other than the suggestions."
         );
         let prompt = format!("List the {count} most likely next word or phrase for: \"{context}\"");
-        let raw = self.complete_raw(&system, &prompt).await?;
+        let raw = self.complete_raw(&system, &prompt, 50).await?;
         eprintln!("[plume] ai_suggest raw response: {raw:?}");
 
         Ok(parse_suggestions(&raw, &context, count))
@@ -465,7 +469,7 @@ impl OllamaProvider {
 
 #[async_trait]
 impl LlmProvider for OllamaProvider {
-    async fn complete_raw(&self, system: &str, prompt: &str) -> Result<String, String> {
+    async fn complete_raw(&self, system: &str, prompt: &str, max_tokens: u32) -> Result<String, String> {
         let body = serde_json::json!({
             "model": self.model,
             "messages": [
@@ -473,21 +477,22 @@ impl LlmProvider for OllamaProvider {
                 {"role": "user", "content": prompt}
             ],
             "stream": false,
-            "max_tokens": 1024,
+            "max_tokens": max_tokens,
             "temperature": 0.1,
             "reasoning_format": "none",
         });
 
+        let url = format!("{}/v1/chat/completions", self.endpoint);
         let resp = self
             .client
-            .post(format!("{}/v1/chat/completions", self.endpoint))
+            .post(&url)
             .json(&body)
             .send()
             .await
-            .map_err(|e| format!("request failed: {e}"))?;
+            .map_err(|e| format!("Ollama request to {url} failed after {max_tokens} max tokens: {e}"))?;
 
         let data: serde_json::Value =
-            resp.json().await.map_err(|e| format!("parse failed: {e}"))?;
+            resp.json().await.map_err(|e| format!("Ollama parse error from {url}: {e}"))?;
 
         extract_content(&data)
     }
@@ -521,28 +526,29 @@ impl OpenAiProvider {
 
 #[async_trait]
 impl LlmProvider for OpenAiProvider {
-    async fn complete_raw(&self, system: &str, prompt: &str) -> Result<String, String> {
+    async fn complete_raw(&self, system: &str, prompt: &str, max_tokens: u32) -> Result<String, String> {
         let body = serde_json::json!({
             "model": self.model,
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": prompt}
             ],
-            "max_tokens": 1024,
+            "max_tokens": max_tokens,
             "temperature": 0.1,
         });
 
+        let url = self.endpoint.as_str();
         let resp = self
             .client
-            .post(self.endpoint.as_str())
+            .post(url)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .json(&body)
             .send()
             .await
-            .map_err(|e| format!("request failed: {e}"))?;
+            .map_err(|e| format!("OpenAI request to {url} failed: {e}"))?;
 
         let data: serde_json::Value =
-            resp.json().await.map_err(|e| format!("parse failed: {e}"))?;
+            resp.json().await.map_err(|e| format!("OpenAI parse error from {url}: {e}"))?;
 
         extract_content(&data)
     }
@@ -569,7 +575,7 @@ impl LocalProvider {
 
 #[async_trait]
 impl LlmProvider for LocalProvider {
-    async fn complete_raw(&self, system: &str, prompt: &str) -> Result<String, String> {
+    async fn complete_raw(&self, system: &str, prompt: &str, max_tokens: u32) -> Result<String, String> {
         let body = serde_json::json!({
             "model": self.model,
             "messages": [
@@ -577,7 +583,7 @@ impl LlmProvider for LocalProvider {
                 {"role": "user", "content": prompt}
             ],
             "stream": false,
-            "max_tokens": 1024,
+            "max_tokens": max_tokens,
             "temperature": 0.1,
             "reasoning_format": "none",
             "chat_template_kwargs": {
@@ -585,16 +591,17 @@ impl LlmProvider for LocalProvider {
             },
         });
 
+        let url = format!("{}/v1/chat/completions", self.endpoint);
         let resp = self
             .client
-            .post(format!("{}/v1/chat/completions", self.endpoint))
+            .post(&url)
             .json(&body)
             .send()
             .await
-            .map_err(|e| format!("request failed: {e}"))?;
+            .map_err(|e| format!("llama.cpp request to {url} failed (max_tokens={max_tokens}): {e}"))?;
 
         let data: serde_json::Value =
-            resp.json().await.map_err(|e| format!("parse failed: {e}"))?;
+            resp.json().await.map_err(|e| format!("llama.cpp parse error from {url}: {e}"))?;
 
         extract_content(&data)
     }
@@ -684,7 +691,7 @@ impl CustomProvider {
 
 #[async_trait]
 impl LlmProvider for CustomProvider {
-    async fn complete_raw(&self, system: &str, prompt: &str) -> Result<String, String> {
+    async fn complete_raw(&self, system: &str, prompt: &str, max_tokens: u32) -> Result<String, String> {
         let body = serde_json::json!({
             "model": self.model,
             "messages": [
@@ -692,7 +699,7 @@ impl LlmProvider for CustomProvider {
                 {"role": "user", "content": prompt}
             ],
             "stream": false,
-            "max_tokens": 1024,
+            "max_tokens": max_tokens,
             "temperature": 0.1,
         });
 
@@ -702,13 +709,14 @@ impl LlmProvider for CustomProvider {
             req = req.header(key, val);
         }
 
+        let url = &self.url;
         let resp = req
             .send()
             .await
-            .map_err(|e| format!("request failed: {e}"))?;
+            .map_err(|e| format!("Custom API request to {url} failed: {e}"))?;
 
         let data: serde_json::Value =
-            resp.json().await.map_err(|e| format!("parse failed: {e}"))?;
+            resp.json().await.map_err(|e| format!("Custom API parse error from {url}: {e}"))?;
 
         extract_content(&data)
     }

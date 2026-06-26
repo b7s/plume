@@ -164,7 +164,7 @@ fn default_min_word_len() -> usize { 1 }
 
 fn default_max_added_chars() -> usize { 5 }
 
-fn default_request_timeout_secs() -> u64 { 30 }
+fn default_request_timeout_secs() -> u64 { 600 }
 
 fn default_resize_debounce_ms() -> u64 { 250 }
 
@@ -198,7 +198,7 @@ impl Default for Config {
             debounce_ms: 300,
             min_word_len: 1,
             max_added_chars: 5,
-            request_timeout_secs: 30,
+            request_timeout_secs: 600,
             resize_debounce_ms: 250,
             hover_timeout_secs: 30,
             hide_during_fullscreen: false,
