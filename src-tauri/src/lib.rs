@@ -12,6 +12,7 @@ use std::time::Duration;
 use tauri::{
     AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, RunEvent, WindowEvent,
 };
+use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use uiautomation::{
     UIAutomation, UIElement,
@@ -650,6 +651,9 @@ pub fn run() {
             std::thread::spawn(move || {
                 capture::start(handle);
             });
+
+            // Enable auto-start with Windows on first launch.
+            let _ = app.autolaunch().enable();
 
             Ok(())
         })
