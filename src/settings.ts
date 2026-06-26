@@ -1,6 +1,6 @@
 import "./settings.css";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 
 interface Config {
   provider: string;
@@ -19,6 +19,13 @@ interface Config {
   ai_suggestion_delay: number;
   hide_during_fullscreen: boolean;
   window_opacity: number;
+  compute_backend: string;
+}
+
+interface GpuInfo {
+  id: string;
+  label: string;
+  version: string | null;
 }
 
 // [GGUF filename, group, label, download URL]
@@ -112,6 +119,11 @@ root.innerHTML = `
       <label class="cfg-field" data-provider="local">
         <span>Endpoint</span>
         <input id="cfg-endpoint-local" class="cfg-input" type="text" placeholder="http://127.0.0.1:8080" />
+      </label>
+      <label class="cfg-field" data-provider="local">
+        <span>Compute Device</span>
+        <select id="cfg-compute-backend" class="cfg-input"></select>
+        <span id="cfg-gpu-status" style="font-size:11px;opacity:0.6;display:none;"></span>
       </label>
 
       <label class="cfg-field" data-provider="ollama">
@@ -225,6 +237,8 @@ const cfgIdleTimeout = document.getElementById("cfg-idle-timeout") as HTMLInputE
 const cfgHideFullscreen = document.getElementById("cfg-hide-fullscreen") as HTMLInputElement;
 const cfgWindowOpacity = document.getElementById("cfg-window-opacity") as HTMLInputElement;
 const cfgWindowOpacityValue = document.getElementById("cfg-window-opacity-value") as HTMLSpanElement;
+const cfgComputeBackend = document.getElementById("cfg-compute-backend") as HTMLSelectElement;
+const cfgGpuStatus = document.getElementById("cfg-gpu-status") as HTMLSpanElement;
 const cfgTrEnabled = document.getElementById("cfg-tr-enabled") as HTMLInputElement;
 const cfgTrLang = document.getElementById("cfg-tr-lang") as HTMLSelectElement;
 const modalCancel = document.getElementById("modal-cancel") as HTMLButtonElement;
@@ -298,6 +312,32 @@ function updateProviderFields() {
 }
 
 cfgProvider.addEventListener("change", updateProviderFields);
+
+// When any form field in the settings UI is focused or changed, notify the
+// overlay to suppress text capture. The overlay uses the "focus" emit to
+// start suppression and the "change" emit on <select> to resume sooner.
+document.addEventListener("focusin", (e) => {
+  const target = e.target as HTMLElement;
+  if (target.matches("input, select, textarea")) {
+    emit("plume:ui-interaction").catch(() => {});
+  }
+});
+// Once a select option is chosen the native dropdown closes — tell the
+// overlay it can resume capture after a short closing delay.
+document.addEventListener("change", (e) => {
+  const target = e.target as HTMLElement;
+  if (target.matches("select")) {
+    emit("plume:ui-change-done").catch(() => {});
+  }
+});
+
+// Listen for GPU→CPU fallback event
+listen<string>("plume:gpu-fallback", (event) => {
+  const backend = event.payload;
+  cfgGpuStatus.textContent = `⚠ GPU (${backend}) failed — fell back to CPU`;
+  cfgGpuStatus.style.display = "";
+  cfgComputeBackend.value = "cpu";
+}).catch(console.error);
 
 function getModelValue(provider: string): string {
   if (provider === "local") {
@@ -375,6 +415,23 @@ async function loadConfig() {
     cfgDictLang.appendChild(opt);
   }
   cfgDictLang.value = cfg.dictionary?.language || "en_US";
+
+  // Detect and populate GPU backends
+  const backends = await invoke<GpuInfo[]>("detect_gpus");
+  cfgComputeBackend.innerHTML = "";
+  for (const gpu of backends) {
+    const opt = document.createElement("option");
+    opt.value = gpu.id;
+    opt.textContent = gpu.label;
+    cfgComputeBackend.appendChild(opt);
+  }
+  cfgComputeBackend.value = cfg.compute_backend || "cpu";
+  if (backends.length <= 1) {
+    cfgGpuStatus.textContent = "No GPU detected — using CPU";
+    cfgGpuStatus.style.display = "";
+  } else {
+    cfgGpuStatus.style.display = "none";
+  }
 
   updateProviderFields();
 }
@@ -454,6 +511,7 @@ modalSave.onclick = async () => {
     ai_suggestion_delay: parseInt(cfgAiSuggestionDelay.value) || 800,
     hide_during_fullscreen: cfgHideFullscreen.checked,
     window_opacity: parseInt(cfgWindowOpacity.value) || 100,
+    compute_backend: cfgComputeBackend.value,
   };
 
   try {
@@ -479,11 +537,12 @@ modalSave.onclick = async () => {
     // never takes effect until the app is fully restarted.
     const portVal = parseInt(cfgPort.value) || 8080;
     const becameLocal = provider === "local" && (existing.provider || "") !== "local";
+    const backendChanged = provider === "local" && (existing.compute_backend || "cpu") !== cfgComputeBackend.value;
     const localModelChanged =
       provider === "local" &&
       (existing.provider || "") === "local" &&
       (existing.model !== model || (existing.port ?? 8080) !== portVal);
-    if (becameLocal || localModelChanged) {
+    if (becameLocal || localModelChanged || backendChanged) {
       modalSave.textContent = "Reloading model…";
       try {
         await invoke<string>("restart_llama");

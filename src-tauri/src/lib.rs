@@ -2,11 +2,13 @@ mod ai;
 mod capture;
 mod config;
 mod engine;
+mod gpu;
 mod llama;
 mod spellcheck;
 mod state;
 
 use serde::Serialize;
+use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{
@@ -392,6 +394,11 @@ async fn suggest_next_words(app: AppHandle, text: String) -> Result<Vec<String>,
 }
 
 #[tauri::command]
+fn detect_gpus() -> Vec<gpu::GpuInfo> {
+    gpu::detect()
+}
+
+#[tauri::command]
 async fn check_model(model_name: String) -> bool {
     let llama = crate::llama::LlamaSetup::new();
     llama.model_exists(&model_name)
@@ -445,27 +452,79 @@ async fn restart_llama(app: AppHandle) -> Result<String, String> {
     let model_name = cfg.model.clone();
     let model_url = cfg.model_url.clone();
     let port = cfg.port;
+    let backend = cfg.compute_backend.clone();
+    let cuda_ver = if backend == "cuda" {
+        gpu::detect().into_iter().find(|g| g.id == "cuda").and_then(|g| g.version)
+    } else {
+        None
+    };
 
-    eprintln!("[plume] Restarting llama-server with {model_name} on port {port}");
+    eprintln!("[plume] Restarting llama-server with {model_name} on port {port} (backend={backend})");
     llama::kill_all();
     let _ = app.emit("plume:model-reload", ());
 
     let (server_path, model_path) =
-        llama::LlamaSetup::ensure_ready(&app, &model_name, &model_url, port, true, true)
+        llama::LlamaSetup::ensure_ready(&app, &model_name, &model_url, port, &backend, cuda_ver.as_deref(), true, true)
             .await
             .map_err(|e| format!("model setup failed: {e}"))?;
 
-    let child = llama::LlamaSetup::start_server(port, &model_path, &server_path)
-        .map_err(|e| format!("failed to start server: {e}"))?;
+    start_with_fallback(&app, port, &model_path, &server_path, &backend, &model_name, &model_url).await
+}
+
+/// Start llama-server for the given backend. If GPU fails, fall back to CPU.
+async fn start_with_fallback(
+    app: &AppHandle,
+    port: u16,
+    model_path: &PathBuf,
+    server_path: &PathBuf,
+    backend: &str,
+    model_name: &str,
+    model_url: &str,
+) -> Result<String, String> {
+    match try_start_and_wait(port, model_path, server_path, backend).await {
+        Ok(()) => {
+            eprintln!("[plume] llama-server ready with {model_name} (backend={backend})");
+            Ok(model_name.to_string())
+        }
+        Err(e) if backend != "cpu" => {
+            eprintln!("[plume] GPU backend {backend} failed: {e}. Falling back to CPU.");
+            llama::kill_all();
+            let _ = app.emit("plume:gpu-fallback", backend);
+
+            let (cpu_server, _) =
+                llama::LlamaSetup::ensure_ready(app, model_name, model_url, port, "cpu", None, true, false)
+                    .await
+                    .map_err(|e| format!("CPU fallback setup: {e}"))?;
+
+            match try_start_and_wait(port, model_path, &cpu_server, "cpu").await {
+                Ok(()) => {
+                    let mut cfg = config::load();
+                    cfg.compute_backend = "cpu".into();
+                    config::save_config(&cfg);
+                    eprintln!("[plume] Fell back to CPU successfully");
+                    Ok(model_name.to_string())
+                }
+                Err(e2) => Err(format!("GPU failed ({e}) and CPU fallback also failed ({e2})")),
+            }
+        }
+        Err(e) => Err(format!("CPU backend failed: {e}")),
+    }
+}
+
+async fn try_start_and_wait(
+    port: u16,
+    model_path: &PathBuf,
+    server_path: &PathBuf,
+    backend: &str,
+) -> Result<(), String> {
+    let child = llama::LlamaSetup::start_server(port, model_path, server_path, backend)
+        .map_err(|e| format!("failed to start server ({backend}): {e}"))?;
     if let Ok(mut proc) = llama::LLAMA_PROCESS.lock() {
         *proc = Some(child);
     }
-
     llama::LlamaSetup::wait_ready(port, Duration::from_secs(180))
         .await
-        .map_err(|e| format!("server didn't become ready: {e}"))?;
-    eprintln!("[plume] llama-server ready with {model_name}");
-    Ok(model_name)
+        .map_err(|e| format!("server didn't become ready ({backend}): {e}"))
 }
 
 #[tauri::command]
@@ -517,6 +576,7 @@ pub fn run() {
             open_settings,
             close_settings,
             list_languages,
+            detect_gpus,
             get_current_language,
             set_dictionary_language,
             translate_text,
@@ -622,26 +682,25 @@ pub fn run() {
                 let model_name = cfg.model.clone();
                 let model_url = cfg.model_url.clone();
                 let port = cfg.port;
+                let backend = cfg.compute_backend.clone();
                 let app_handle = app.handle().clone();
+                let cuda_ver = if backend == "cuda" {
+                    gpu::detect().into_iter().find(|g| g.id == "cuda").and_then(|g| g.version)
+                } else {
+                    None
+                };
 
                 tauri::async_runtime::spawn(async move {
-                    match llama::LlamaSetup::ensure_ready(&app_handle, &model_name, &model_url, port, true, true).await {
+                    match llama::LlamaSetup::ensure_ready(
+                        &app_handle, &model_name, &model_url, port,
+                        &backend, cuda_ver.as_deref(), true, true,
+                    ).await {
                         Ok((server_path, model_path)) => {
                             eprintln!("[plume] Starting llama-server...");
-                            match llama::LlamaSetup::start_server(port, &model_path, &server_path)
-                            {
-                                Ok(child) => {
-                                    if let Ok(mut proc) = llama::LLAMA_PROCESS.lock() {
-                                        *proc = Some(child);
-                                    }
-                                    eprintln!("[plume] Waiting for server health...");
-                                    match llama::LlamaSetup::wait_ready(port, Duration::from_secs(120)).await {
-                                        Ok(_) => eprintln!("[plume] LLM ready on port {port}"),
-                                        Err(e) => eprintln!("[plume] Health check failed: {e}"),
-                                    }
-                                }
-                                Err(e) => eprintln!("[plume] Failed to start server: {e}"),
-                            }
+                            let _ = start_with_fallback(
+                                &app_handle, port, &model_path, &server_path,
+                                &backend, &model_name, &model_url,
+                            ).await;
                         }
                         Err(e) => eprintln!("[plume] LLM setup failed: {e}"),
                     }

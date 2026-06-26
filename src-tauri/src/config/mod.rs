@@ -140,6 +140,8 @@ pub struct Config {
     pub hide_during_fullscreen: bool,
     #[serde(default = "default_window_opacity")]
     pub window_opacity: u8,
+    #[serde(default = "default_compute_backend")]
+    pub compute_backend: String,
 }
 
 fn default_port() -> u16 { 8080 }
@@ -172,6 +174,8 @@ fn default_hide_during_fullscreen() -> bool { false }
 
 fn default_window_opacity() -> u8 { 100 }
 
+fn default_compute_backend() -> String { "cpu".into() }
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -199,6 +203,7 @@ impl Default for Config {
             hover_timeout_secs: 30,
             hide_during_fullscreen: false,
             window_opacity: 100,
+            compute_backend: "cpu".into(),
         }
     }
 }

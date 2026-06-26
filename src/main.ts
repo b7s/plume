@@ -132,6 +132,46 @@ for (const [code, name] of TRANSLATION_LANGS) {
   trLang.appendChild(opt);
 }
 
+// Suppress text capture while any form field in the Plume UI is
+// interacted with. WebView2 native dropdown popups (e.g. <select>) can
+// bypass PID-based self-exclusion and get captured as if the user typed
+// the option text. Same for inputs/textarea — we don't want those triggers.
+let suppressTimer: ReturnType<typeof setTimeout> | null = null;
+let suppressCapture = false;
+
+function setSuppress(ms: number) {
+  suppressCapture = true;
+  if (suppressTimer !== null) clearTimeout(suppressTimer);
+  suppressTimer = setTimeout(() => { suppressCapture = false; }, ms);
+}
+
+document.addEventListener("focusin", (e) => {
+  const target = e.target as HTMLElement;
+  if (target.matches("input, select, textarea")) {
+    const delay = target.matches("select") ? 2000 : 500;
+    setSuppress(delay);
+  }
+});
+
+// Once a select option is chosen the dropdown closes — resume sooner.
+document.addEventListener("change", (e) => {
+  const target = e.target as HTMLElement;
+  if (target.matches("select")) {
+    setSuppress(300);
+  }
+});
+
+// Cross-window: the settings window emits this when its form elements
+// receive focus, so the overlay suppresses capture too.
+listen("plume:ui-interaction", () => {
+  setSuppress(2000);
+});
+
+// Settings window signals a select option was picked — resume sooner.
+listen("plume:ui-change-done", () => {
+  setSuppress(300);
+});
+
 let IDLE_MS = 6_000;
 
 const win = getCurrentWindow();
@@ -524,14 +564,17 @@ win.onResized(({ payload: size }) => {
 });
 
 listen<PlaceholderPayload>("plume:show", (evt) => {
+  if (suppressCapture) return;
   showLoading(evt.payload.window_title || evt.payload.word);
 });
 
 listen<void>("plume:hide", () => {
+  if (suppressCapture) return;
   hideOverlay();
 });
 
 listen<SuggestionPayload>("plume:suggestions", (evt) => {
+  if (suppressCapture) return;
   showSuggestions(evt.payload);
 });
 

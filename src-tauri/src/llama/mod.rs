@@ -75,6 +75,19 @@ fn is_quant_suffix(part: &str) -> bool {
     part == "BF16" || part == "F16" || part.starts_with("UD")
 }
 
+fn asset_backend_pattern(backend: &str) -> &'static str {
+    match backend {
+        "vulkan" => "win-vulkan-x64",
+        "cuda" => "win-cuda-",
+        "hip" => "win-hip-radeon-x64",
+        _ => "win-cpu-x64",
+    }
+}
+
+fn is_gpu_backend(backend: &str) -> bool {
+    matches!(backend, "vulkan" | "cuda" | "hip")
+}
+
 pub struct LlamaSetup {
     llama_dir: PathBuf,
     models_dir: PathBuf,
@@ -91,7 +104,13 @@ impl LlamaSetup {
         }
     }
 
-    pub fn find_server(&self) -> Option<PathBuf> {
+    pub fn find_server(&self, backend: &str) -> Option<PathBuf> {
+        // Backend-specific installed location
+        let ours = self.llama_dir.join(backend).join("llama-server.exe");
+        if ours.exists() {
+            return Some(ours);
+        }
+        // Check PATH
         if let Ok(output) = Command::new("where").arg("llama-server.exe").output() {
             if output.status.success() {
                 if let Ok(stdout) = String::from_utf8(output.stdout) {
@@ -104,10 +123,7 @@ impl LlamaSetup {
                 }
             }
         }
-        let ours = self.llama_dir.join("llama-server.exe");
-        if ours.exists() {
-            return Some(ours);
-        }
+        // Check bundled location (adjacent to exe)
         if let Ok(exe) = std::env::current_exe() {
             if let Some(parent) = exe.parent() {
                 let bundled = parent.join("llama-server.exe");
@@ -119,7 +135,37 @@ impl LlamaSetup {
         None
     }
 
-    pub async fn install(&self) -> Result<(), String> {
+    /// Map a backend to a llama.cpp release asset substring and find its URL.
+    /// For CUDA, dynamically matches the driver version to available assets.
+    fn resolve_asset_url(
+        &self,
+        data: &serde_json::Value,
+        backend: &str,
+        cuda_ver: Option<&str>,
+    ) -> Result<String, String> {
+        let assets = data["assets"].as_array().ok_or("no assets array")?;
+
+        match backend {
+            "cuda" => {
+                crate::gpu::find_best_cuda_asset(data, cuda_ver)
+            }
+            _ => {
+                let pattern = asset_backend_pattern(backend);
+                assets
+                    .iter()
+                    .find(|a| {
+                        a["name"]
+                            .as_str()
+                            .is_some_and(|n| n.contains(pattern) && n.ends_with(".zip") && !n.contains("cudart"))
+                    })
+                    .and_then(|a| a["browser_download_url"].as_str())
+                    .map(|s| s.to_string())
+                    .ok_or_else(|| format!("no {} zip asset found in release", pattern))
+            }
+        }
+    }
+
+    pub async fn install(&self, backend: &str, cuda_ver: Option<&str>) -> Result<(), String> {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
             .build()
@@ -135,21 +181,11 @@ impl LlamaSetup {
 
         let data: serde_json::Value = resp.json().await.map_err(|e| format!("parse: {e}"))?;
 
-        let zip_url = data["assets"]
-            .as_array()
-            .ok_or("no assets array")?
-            .iter()
-            .find(|a| {
-                a["name"]
-                    .as_str()
-                    .is_some_and(|n| n.contains("win-cpu-x64") && n.ends_with(".zip"))
-            })
-            .and_then(|a| a["browser_download_url"].as_str())
-            .ok_or("no win-cpu-x64 zip asset")?;
+        let zip_url = self.resolve_asset_url(&data, backend, cuda_ver)?;
 
-        eprintln!("[plume] Downloading llama.cpp from {zip_url}");
+        eprintln!("[plume] Downloading llama.cpp ({backend}) from {zip_url}");
         let zip_bytes = client
-            .get(zip_url)
+            .get(&zip_url)
             .header("User-Agent", USER_AGENT)
             .send()
             .await
@@ -158,7 +194,8 @@ impl LlamaSetup {
             .await
             .map_err(|e| format!("read: {e}"))?;
 
-        std::fs::create_dir_all(&self.llama_dir).map_err(|e| format!("mkdir: {e}"))?;
+        let extract_dir = self.llama_dir.join(backend);
+        std::fs::create_dir_all(&extract_dir).map_err(|e| format!("mkdir: {e}"))?;
 
         let cursor = Cursor::new(zip_bytes.to_vec());
         let mut archive = zip::ZipArchive::new(cursor).map_err(|e| format!("zip: {e}"))?;
@@ -170,7 +207,7 @@ impl LlamaSetup {
                 .and_then(|n| n.to_str())
                 .unwrap_or(file.name())
                 .to_owned();
-            let outpath = self.llama_dir.join(&fname);
+            let outpath = extract_dir.join(&fname);
 
             if file.is_dir() {
                 let _ = std::fs::create_dir_all(&outpath);
@@ -185,7 +222,7 @@ impl LlamaSetup {
             }
         }
 
-        eprintln!("[plume] llama-server installed to {:?}", self.llama_dir);
+        eprintln!("[plume] llama-server ({backend}) installed to {:?}", extract_dir);
         Ok(())
     }
 
@@ -247,7 +284,12 @@ impl LlamaSetup {
         Ok(path)
     }
 
-    pub fn start_server(port: u16, model_path: &PathBuf, server_path: &PathBuf) -> Result<Child, String> {
+    pub fn start_server(
+        port: u16,
+        model_path: &PathBuf,
+        server_path: &PathBuf,
+        backend: &str,
+    ) -> Result<Child, String> {
         let mut cmd = Command::new(server_path);
         cmd.arg("-m")
             .arg(model_path)
@@ -259,6 +301,11 @@ impl LlamaSetup {
             .arg("2048")
             .arg("--no-warmup")
             .stdin(Stdio::null());
+
+        if is_gpu_backend(backend) {
+            cmd.arg("-ngl").arg("99");
+        }
+
         // Show logs in dev (npm run tauri dev), hide in production builds.
         if cfg!(debug_assertions) {
             cmd.stdout(Stdio::inherit()).stderr(Stdio::inherit());
@@ -293,17 +340,19 @@ impl LlamaSetup {
         model_name: &str,
         model_url: &str,
         _port: u16,
+        backend: &str,
+        cuda_ver: Option<&str>,
         install_server: bool,
         download_model: bool,
     ) -> Result<(PathBuf, PathBuf), String> {
         let setup = Self::new();
 
-        let server_path = if let Some(p) = setup.find_server() {
+        let server_path = if let Some(p) = setup.find_server(backend) {
             p
         } else if install_server {
-            eprintln!("[plume] llama-server not found — installing...");
-            setup.install().await?;
-            setup.find_server().ok_or("install succeeded but server not found")?
+            eprintln!("[plume] llama-server ({backend}) not found — installing...");
+            setup.install(backend, cuda_ver).await?;
+            setup.find_server(backend).ok_or("install succeeded but server not found")?
         } else {
             return Err("llama-server not installed and auto-install disabled".into());
         };
