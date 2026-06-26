@@ -249,8 +249,8 @@ impl LlamaSetup {
     }
 
     pub fn start_server(port: u16, model_path: &PathBuf, server_path: &PathBuf) -> Result<Child, String> {
-        let child = Command::new(server_path)
-            .arg("-m")
+        let mut cmd = Command::new(server_path);
+        cmd.arg("-m")
             .arg(model_path)
             .arg("--port")
             .arg(port.to_string())
@@ -259,11 +259,14 @@ impl LlamaSetup {
             .arg("-c")
             .arg("2048")
             .arg("--no-warmup")
-            .stdin(Stdio::null())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .spawn()
-            .map_err(|e| format!("spawn: {e}"))?;
+            .stdin(Stdio::null());
+        // Show logs in dev (npm run tauri dev), hide in production builds.
+        if cfg!(debug_assertions) {
+            cmd.stdout(Stdio::inherit()).stderr(Stdio::inherit());
+        } else {
+            cmd.stdout(Stdio::null()).stderr(Stdio::null());
+        }
+        let child = cmd.spawn().map_err(|e| format!("spawn: {e}"))?;
         Ok(child)
     }
 

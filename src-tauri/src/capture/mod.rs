@@ -7,6 +7,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use uiautomation::{
     UIAutomation, UIElement,
     patterns::{UITextPattern, UIValuePattern},
+    types::ControlType,
 };
 
 use crate::engine;
@@ -52,6 +53,8 @@ struct CaptureState {
     busy: AtomicBool,
     /// True after a paste / large jump — suppress suggestions until real typing resumes.
     suppress: bool,
+    /// Timestamp of the last UIA text read — used to throttle expensive reads.
+    last_read: Instant,
 }
 
 pub fn start(app: AppHandle) {
@@ -71,7 +74,11 @@ pub fn start(app: AppHandle) {
         last_fire: Instant::now() - Duration::from_secs(60),
         busy: AtomicBool::new(false),
         suppress: false,
+        last_read: Instant::now() - Duration::from_secs(60),
     }));
+
+    // Clone for the closure below
+    let st = state_capture.clone();
 
     let plume_pid = std::process::id();
 
@@ -112,41 +119,75 @@ pub fn start(app: AppHandle) {
                 }
             }
 
-            if let Some(text) = read_text(&focused) {
-                let app = app.clone();
-                let st = state_capture.clone();
-                let title = get_window_title(hwnd_int);
-                handle_text(app, st, text, hwnd_int, title, &cfg);
+            // Throttle expensive UIA reads for the same focused control.
+            // Browsers rebuild the accessibility tree on every scroll event,
+            // so reading the visible text range is very slow. Skip the read
+            // when the same control still has focus and not enough time has
+            // elapsed since the last read.
+            let should_read = {
+                let guard = match st.lock() {
+                    Ok(g) => g,
+                    Err(_) => continue,
+                };
+                if guard.last_hwnd != hwnd_int {
+                    true
+                } else {
+                    let elapsed = Instant::now().duration_since(guard.last_read).as_millis() as u64;
+                    elapsed > cfg.read_throttle_ms
+                }
+            };
+
+            if should_read {
+                if let Some(text) = read_text(&focused) {
+                    if let Ok(mut guard) = st.lock() {
+                        guard.last_read = Instant::now();
+                    }
+                    let app = app.clone();
+                    let st = st.clone();
+                    let title = get_window_title(hwnd_int);
+                    handle_text(app, st, text, hwnd_int, title, &cfg);
+                }
             }
         }
     }
 }
 
 fn read_text(element: &UIElement) -> Option<String> {
-    // Try TextPattern first — used by rich text editors (Word, Notepad, browsers).
-    // Only read visible ranges, NOT selection (selection = highlighted text, not typing).
-    if let Ok(text_pattern) = element.get_pattern::<UITextPattern>() {
-        if let Ok(ranges) = text_pattern.get_visible_ranges() {
-            for range in ranges {
-                if let Ok(text) = range.get_text(-1) {
-                    if !text.is_empty() {
-                        return Some(sanitize_text(&text));
-                    }
-                }
-            }
+    // Only capture text from editable controls — skip browser pages,
+    // Explorer file lists, and other read-only text.
+
+    // Check ValuePattern first (covers inputs, textareas, editors, terminals).
+    if let Ok(value_pattern) = element.get_pattern::<UIValuePattern>() {
+        // Read-only → skip (e.g. Explorer file names, status bar text)
+        if value_pattern.is_readonly().unwrap_or(true) {
+            return None;
+        }
+        let text = value_pattern.get_value().ok()?;
+        if !text.is_empty() {
+            return Some(sanitize_text(&text));
         }
         return None;
     }
 
-    // ValuePattern — used by simple input fields (text boxes, address bars).
-    if let Ok(value_pattern) = element.get_pattern::<UIValuePattern>() {
-        if let Ok(text) = value_pattern.get_value() {
-            if !text.is_empty() {
-                return Some(sanitize_text(&text));
+    // No ValuePattern — check Document control type (rich text editors,
+    // contenteditable) that only expose TextPattern.
+    if let Ok(ctrl_type) = element.get_control_type() {
+        if ctrl_type == ControlType::Document {
+            if let Ok(text_pattern) = element.get_pattern::<UITextPattern>() {
+                if let Ok(ranges) = text_pattern.get_visible_ranges() {
+                    for range in ranges {
+                        if let Ok(text) = range.get_text(-1) {
+                            if !text.is_empty() {
+                                return Some(sanitize_text(&text));
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 
+    // Non-editable element (browser page, static text, etc.) → skip.
     None
 }
 

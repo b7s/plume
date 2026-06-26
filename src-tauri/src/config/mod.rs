@@ -120,6 +120,8 @@ pub struct Config {
     // Capture
     #[serde(default = "default_poll_interval_ms")]
     pub poll_interval_ms: u64,
+    #[serde(default = "default_read_throttle_ms")]
+    pub read_throttle_ms: u64,
     #[serde(default = "default_debounce_ms")]
     pub debounce_ms: u64,
     #[serde(default = "default_min_word_len")]
@@ -151,6 +153,8 @@ fn default_ai_suggestion_count() -> usize { 3 }
 fn default_ai_suggestion_delay() -> u64 { 800 }
 
 fn default_poll_interval_ms() -> u64 { 100 }
+
+fn default_read_throttle_ms() -> u64 { 150 }
 
 fn default_debounce_ms() -> u64 { 300 }
 
@@ -186,6 +190,7 @@ impl Default for Config {
             ai_suggestion_count: 3,
             ai_suggestion_delay: 800,
             poll_interval_ms: 100,
+            read_throttle_ms: 150,
             debounce_ms: 300,
             min_word_len: 1,
             max_added_chars: 5,

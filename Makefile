@@ -62,21 +62,7 @@ version-bump:
 release: check
 	@if (-not "$(RELEASE_VERSION)") { Write-Error "provide version=x.y.z"; exit 1 }
 	@if ("$(RELEASE_VERSION)" -notmatch '^\d+\.\d+\.\d+$$') { Write-Error "invalid version format. Expected x.y.z"; exit 1 }
-	$$msg = "$(RELEASE_MESSAGE)"; if (-not $$msg) { $$msg = "Release v$(RELEASE_VERSION)" }; \
-	echo "Staging files..."; git add -A; \
-	echo "Creating commit..."; git commit -m $$msg; \
-	echo "Pushing to origin..."; git push origin HEAD; \
-	echo "Creating tag v$(RELEASE_VERSION)..."; git tag -a "v$(RELEASE_VERSION)" -m $$msg; \
-	echo "Pushing tag..."; git push origin "v$(RELEASE_VERSION)"; \
-	echo ""; \
-	echo "Tag v$(RELEASE_VERSION) pushed. GitHub Actions will build the release."; \
-	echo "Updating local config files to new version..."; \
-	(Get-Content $(TAURI_DIR)/tauri.conf.json) -replace '"version": "[^"]*"', '"version": "$(RELEASE_VERSION)"' | Set-Content $(TAURI_DIR)/tauri.conf.json; \
-	(Get-Content $(TAURI_DIR)/Cargo.toml) -replace '^version = "[^"]*"', 'version = "$(RELEASE_VERSION)"' | Set-Content $(TAURI_DIR)/Cargo.toml; \
-	(Get-Content package.json) -replace '"version": "[^"]*"', '"version": "$(RELEASE_VERSION)"' | Set-Content package.json; \
-	Set-Content -Path version -Value "$(RELEASE_VERSION)"; \
-	echo "Local files updated to $(RELEASE_VERSION)."; \
-	echo "https://github.com/b7s/plume/releases/tag/v$(RELEASE_VERSION)"
+	@$$msg = "$(RELEASE_MESSAGE)"; if (-not $$msg) { $$msg = "Release v$(RELEASE_VERSION)" }; echo "Staging files..."; git add -A; echo "Creating commit..."; git commit -m $$msg; echo "Pushing to origin..."; git push origin HEAD; echo "Creating tag v$(RELEASE_VERSION)..."; git tag -a "v$(RELEASE_VERSION)" -m $$msg; echo "Pushing tag..."; git push origin "v$(RELEASE_VERSION)"; echo ""; echo "Tag v$(RELEASE_VERSION) pushed. GitHub Actions will build the release."; echo "Updating local config files to new version..."; (Get-Content $(TAURI_DIR)/tauri.conf.json) -replace '"version": "[^"]*"', '"version": "$(RELEASE_VERSION)"' | Set-Content $(TAURI_DIR)/tauri.conf.json; (Get-Content $(TAURI_DIR)/Cargo.toml) -replace '^version = "[^"]*"', 'version = "$(RELEASE_VERSION)"' | Set-Content $(TAURI_DIR)/Cargo.toml; (Get-Content package.json) -replace '"version": "[^"]*"', '"version": "$(RELEASE_VERSION)"' | Set-Content package.json; Set-Content -Path version -Value "$(RELEASE_VERSION)"; echo "Local files updated to $(RELEASE_VERSION)."; echo "https://github.com/b7s/plume/releases/tag/v$(RELEASE_VERSION)"
 
 clean:
 	@echo "Cleaning frontend artifacts..."
