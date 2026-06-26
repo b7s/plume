@@ -36,18 +36,20 @@ const MODEL_PRESETS_LOCAL: [string, string, string, string][] = [
     "https://huggingface.co/bartowski/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/Qwen2.5-0.5B-Instruct-Q8_0.gguf"],
   ["Qwen3-0.6B-Q8_0.gguf", "Qwen", "Qwen3-0.6B (Q8_0, 639MB) — recommended",
     ""],
-  ["Qwen2.5-1.5B-Instruct-Q4_K_M.gguf", "Qwen", "Qwen2.5-1.5B (Q4_K_M, 940MB) — good quality",
+  ["Qwen2.5-1.5B-Instruct-Q4_K_M.gguf", "Qwen", "Qwen2.5-1.5B (Q4_K_M, 940MB) — GPU friendly",
     "https://huggingface.co/bartowski/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/Qwen2.5-1.5B-Instruct-Q4_K_M.gguf"],
-  ["Qwen3-1.7B-Q4_K_M.gguf", "Qwen", "Qwen3-1.7B (Q4_K_M, ~1.1GB) — better quality",
+  ["Qwen3-1.7B-Q4_K_M.gguf", "Qwen", "Qwen3-1.7B (Q4_K_M, ~1.1GB) — GPU friendly",
     ""],
-  ["Llama-3.2-1B-Instruct-IQ3_M.gguf", "Llama", "Llama 3.2-1B (IQ3_M, 627MB) — multilingual",
+  ["Llama-3.2-1B-Instruct-IQ3_M.gguf", "Llama", "Llama 3.2-1B (IQ3_M, 627MB) — multilingual, CPU optimised",
     "https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-IQ3_M.gguf"],
-  ["google_gemma-3-1b-it-Q4_K_M.gguf", "Gemma", "Gemma 3-1B (Q4_K_M, 769MB) — efficient on CPU",
+  ["google_gemma-3-1b-it-Q4_K_M.gguf", "Gemma", "Gemma 3-1B (Q4_K_M, 769MB) — GPU friendly",
     "https://huggingface.co/bartowski/google_gemma-3-1b-it-GGUF/resolve/main/google_gemma-3-1b-it-Q4_K_M.gguf"],
-  ["gemma-2-2b-it-IQ3_M.gguf", "Gemma", "Gemma 2-2B (IQ3_M, 1.33GB) — most capable",
+  ["gemma-2-2b-it-IQ3_M.gguf", "Gemma", "Gemma 2-2B (IQ3_M, 1.33GB) — CPU optimised",
     "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-IQ3_M.gguf"],
-  ["gemma-4-E2B-it-UD-IQ2_M.gguf", "Gemma", "Gemma 4 E2B (UD-IQ2_M, 2.29GB) — most capable, 128k context",
+    ["gemma-4-E2B-it-UD-IQ2_M.gguf", "Gemma", "Gemma 4 E2B (UD-IQ2_M, 2.29GB) — most capable, CPU optimised, 128k context",
     "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-UD-IQ2_M.gguf"],
+  ["gemma-4-E2B-it-Q4_K_M.gguf", "Gemma", "Gemma 4 E2B (Q4_K_M, 3.11GB) — most capable, GPU friendly, 128k context",
+    "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf"],
 ];
 
 const MODEL_PRESETS_OLLAMA: [string, string][] = [
@@ -331,12 +333,43 @@ document.addEventListener("change", (e) => {
   }
 });
 
+// Show GPU compatibility hint when the selected model uses CPU-optimised quant
+function updateGpuModelHint() {
+  if (cfgComputeBackend.value !== "cpu") {
+    const model = getModelValue("local");
+    if (/IQ\d|UD-/.test(model)) {
+      cfgGpuStatus.textContent = "⚠ This model uses CPU-optimised quantisation — switch to Q4_K_M or Q8_0 for GPU speed";
+      cfgGpuStatus.style.display = "";
+    } else {
+      cfgGpuStatus.style.display = "none";
+    }
+  } else {
+    cfgGpuStatus.style.display = "none";
+  }
+}
+cfgComputeBackend.addEventListener("change", updateGpuModelHint);
+cfgModelLocal.addEventListener("change", updateGpuModelHint);
+cfgModelLocalCustom.addEventListener("input", updateGpuModelHint);
+
 // Listen for GPU→CPU fallback event
 listen<string>("plume:gpu-fallback", (event) => {
   const backend = event.payload;
   cfgGpuStatus.textContent = `⚠ GPU (${backend}) failed — fell back to CPU`;
   cfgGpuStatus.style.display = "";
   cfgComputeBackend.value = "cpu";
+}).catch(console.error);
+
+// Listen for model fallback event (corrupt model → default)
+listen<string>("plume:model-fallback", (event) => {
+  const oldModel = event.payload;
+  const defaultModel = "Qwen3-0.6B-Q8_0.gguf";
+  cfgGpuStatus.textContent = `⚠ "${oldModel}" failed — switched to ${defaultModel}`;
+  cfgGpuStatus.style.display = "";
+  // Update the model select to reflect the fallback
+  cfgModelLocal.value = defaultModel;
+  cfgModelLocalCustom.value = defaultModel;
+  // Schedule a reload so the UI picks up the new model
+  setTimeout(() => location.reload(), 3000);
 }).catch(console.error);
 
 function getModelValue(provider: string): string {
@@ -433,6 +466,7 @@ async function loadConfig() {
     cfgGpuStatus.style.display = "none";
   }
 
+  updateGpuModelHint();
   updateProviderFields();
 }
 
@@ -547,7 +581,9 @@ modalSave.onclick = async () => {
       try {
         await invoke<string>("restart_llama");
       } catch (e) {
-        console.error("restart_llama failed:", e);
+        modalSave.textContent = `Error: ${e}`;
+        modalSave.disabled = false;
+        return;
       }
     }
 
@@ -560,7 +596,7 @@ modalSave.onclick = async () => {
     await invoke("close_settings");
   } catch (e) {
     console.error(e);
-    modalSave.textContent = "Save";
+    modalSave.textContent = "Error saving settings";
     modalSave.disabled = false;
   }
 };

@@ -439,6 +439,8 @@ fn save_config(app: AppHandle, config: config::Config) -> bool {
     true
 }
 
+const DEFAULT_MODEL: &str = "Qwen3-0.6B-Q8_0.gguf";
+
 /// Restart the local llama-server so it picks up a newly-saved model/port.
 /// Kills the current server (and any orphaned llama-server.exe holding the
 /// port), then loads the model from the current config. No-op for non-local
@@ -449,26 +451,88 @@ async fn restart_llama(app: AppHandle) -> Result<String, String> {
     if cfg.provider != "local" {
         return Ok("skipped: not local provider".into());
     }
-    let model_name = cfg.model.clone();
-    let model_url = cfg.model_url.clone();
-    let port = cfg.port;
-    let backend = cfg.compute_backend.clone();
-    let cuda_ver = if backend == "cuda" {
-        gpu::detect().into_iter().find(|g| g.id == "cuda").and_then(|g| g.version)
-    } else {
-        None
-    };
+    start_model(&app, &cfg, false).await
+}
 
-    eprintln!("[plume] Restarting llama-server with {model_name} on port {port} (backend={backend})");
-    llama::kill_all();
-    let _ = app.emit("plume:model-reload", ());
+/// Try to start llama-server. On any failure (corrupt model, GPU crash,
+/// download error) falls back to the default model Qwen3-0.6B and persists it.
+fn start_model<'a>(
+    app: &'a AppHandle,
+    cfg: &'a config::Config,
+    is_retry: bool,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, String>> + Send + 'a>> {
+    Box::pin(async move {
+        let model_name = cfg.model.clone();
+        let model_url = cfg.model_url.clone();
+        let port = cfg.port;
+        let backend = cfg.compute_backend.clone();
+        let cuda_ver = if backend == "cuda" {
+            gpu::detect().into_iter().find(|g| g.id == "cuda").and_then(|g| g.version)
+        } else {
+            None
+        };
 
-    let (server_path, model_path) =
-        llama::LlamaSetup::ensure_ready(&app, &model_name, &model_url, port, &backend, cuda_ver.as_deref(), true, true)
-            .await
-            .map_err(|e| format!("model setup failed: {e}"))?;
+        eprintln!("[plume] Starting llama-server with {model_name} on port {port} (backend={backend})");
+        llama::kill_all();
+        let _ = app.emit("plume:model-reload", ());
 
-    start_with_fallback(&app, port, &model_path, &server_path, &backend, &model_name, &model_url).await
+        let (server_path, model_path) = match llama::LlamaSetup::ensure_ready(
+            app, &model_name, &model_url, port, &backend, cuda_ver.as_deref(), true, true,
+        ).await {
+            Ok(pair) => pair,
+            Err(e) => {
+                eprintln!("[plume] Model setup failed: {e}");
+                return if !is_retry {
+                    fallback_to_default(app, cfg, &e).await
+                } else {
+                    Err(e)
+                };
+            }
+        };
+
+        match start_with_fallback(app, port, &model_path, &server_path, &backend, &model_name, &model_url).await {
+            Ok(name) => Ok(name),
+            Err(e) => {
+                eprintln!("[plume] Server start failed: {e}");
+                if !is_retry {
+                    fallback_to_default(app, cfg, &e).await
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    })
+}
+
+/// Fall back to the default model, persist the change, and retry once.
+fn fallback_to_default<'a>(
+    app: &'a AppHandle,
+    old_cfg: &'a config::Config,
+    reason: &'a str,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String, String>> + Send + 'a>> {
+    Box::pin(async move {
+        if old_cfg.model == DEFAULT_MODEL {
+            return Err(format!("{reason} — already using the default model, cannot fall back further"));
+        }
+
+        eprintln!("[plume] Falling back to default model {DEFAULT_MODEL} (reason: {reason})");
+        let _ = app.emit("plume:model-fallback", &old_cfg.model);
+
+        // Delete the failing model so a fresh download is attempted next time
+        let llama = llama::LlamaSetup::new();
+        let corrupt_path = llama.model_path(&old_cfg.model);
+        if corrupt_path.exists() {
+            eprintln!("[plume] Deleting corrupt model file: {:?}", corrupt_path);
+            let _ = std::fs::remove_file(&corrupt_path);
+        }
+
+        let mut cfg = old_cfg.clone();
+        cfg.model = DEFAULT_MODEL.into();
+        cfg.model_url = String::new();
+        config::save_config(&cfg);
+
+        start_model(app, &cfg, true).await
+    })
 }
 
 /// Start llama-server for the given backend. If GPU fails, fall back to CPU.
@@ -504,7 +568,10 @@ async fn start_with_fallback(
                     eprintln!("[plume] Fell back to CPU successfully");
                     Ok(model_name.to_string())
                 }
-                Err(e2) => Err(format!("GPU failed ({e}) and CPU fallback also failed ({e2})")),
+                Err(e2) => {
+                    // CPU also failed — return error so the outer model fallback can trigger
+                    Err(format!("GPU failed ({e}) and CPU fallback also failed ({e2})"))
+                }
             }
         }
         Err(e) => Err(format!("CPU backend failed: {e}")),
@@ -522,6 +589,19 @@ async fn try_start_and_wait(
     if let Ok(mut proc) = llama::LLAMA_PROCESS.lock() {
         *proc = Some(child);
     }
+
+    // Give the process a moment to start, then check if it died quickly
+    // (corrupt model → server exits in <1s). Without this we'd wait 180s.
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    if let Ok(mut proc) = llama::LLAMA_PROCESS.lock() {
+        if let Some(child) = proc.as_mut() {
+            if let Ok(Some(status)) = child.try_wait() {
+                let code = status.code().map(|c| c.to_string()).unwrap_or_else(|| "signal".into());
+                return Err(format!("llama-server exited immediately (exit={code}) — model file may be corrupt"));
+            }
+        }
+    }
+
     llama::LlamaSetup::wait_ready(port, Duration::from_secs(180))
         .await
         .map_err(|e| format!("server didn't become ready ({backend}): {e}"))
@@ -679,30 +759,13 @@ pub fn run() {
             // suggestions silently fail (connection refused) by default.
             // Hunspell spell-checking is independent and stays instant.
             if cfg.provider == "local" {
-                let model_name = cfg.model.clone();
-                let model_url = cfg.model_url.clone();
-                let port = cfg.port;
-                let backend = cfg.compute_backend.clone();
                 let app_handle = app.handle().clone();
-                let cuda_ver = if backend == "cuda" {
-                    gpu::detect().into_iter().find(|g| g.id == "cuda").and_then(|g| g.version)
-                } else {
-                    None
-                };
-
+                // Clone everything start_model needs — Config is Clone
                 tauri::async_runtime::spawn(async move {
-                    match llama::LlamaSetup::ensure_ready(
-                        &app_handle, &model_name, &model_url, port,
-                        &backend, cuda_ver.as_deref(), true, true,
-                    ).await {
-                        Ok((server_path, model_path)) => {
-                            eprintln!("[plume] Starting llama-server...");
-                            let _ = start_with_fallback(
-                                &app_handle, port, &model_path, &server_path,
-                                &backend, &model_name, &model_url,
-                            ).await;
-                        }
-                        Err(e) => eprintln!("[plume] LLM setup failed: {e}"),
+                    let cfg = config::load();
+                    match start_model(&app_handle, &cfg, false).await {
+                        Ok(model) => eprintln!("[plume] LLM ready with {model}"),
+                        Err(e) => eprintln!("[plume] LLM startup failed: {e}"),
                     }
                 });
             }

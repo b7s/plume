@@ -441,7 +441,7 @@ pub trait LlmProvider: Send + Sync {
              - Do NOT add explanations, labels, introductions, or any text other than the suggestions."
         );
         let prompt = format!("List the {count} most likely next word or phrase for: \"{context}\"");
-        let raw = self.complete_raw(&system, &prompt, 50).await?;
+        let raw = self.complete_raw(&system, &prompt, 20).await?;
         eprintln!("[plume] ai_suggest raw response: {raw:?}");
 
         Ok(parse_suggestions(&raw, &context, count))

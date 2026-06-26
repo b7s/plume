@@ -1,4 +1,4 @@
-use std::io::{Cursor, Write};
+use std::io::{Cursor, Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
@@ -231,7 +231,32 @@ impl LlamaSetup {
     }
 
     pub fn model_exists(&self, name: &str) -> bool {
-        self.model_path(name).exists()
+        let path = self.model_path(name);
+        if !path.exists() {
+            return false;
+        }
+        if !self.validate_gguf(&path) {
+            eprintln!("[plume] Model {name} is corrupted — deleting and will re-download");
+            let _ = std::fs::remove_file(&path);
+            return false;
+        }
+        true
+    }
+
+    fn validate_gguf(&self, path: &PathBuf) -> bool {
+        let mut file = match std::fs::File::open(path) {
+            Ok(f) => f,
+            Err(_) => return false,
+        };
+        // A 2–5 GB model should be at least 16 MB to be plausible
+        if file.metadata().map(|m| m.len()).unwrap_or(0) < 16 * 1024 * 1024 {
+            return false;
+        }
+        let mut magic = [0u8; 4];
+        if file.read_exact(&mut magic).is_err() || &magic != b"GGUF" {
+            return false;
+        }
+        true
     }
 
     pub async fn download_model(&self, app: &AppHandle, name: &str, url: &str) -> Result<PathBuf, String> {
@@ -281,6 +306,19 @@ impl LlamaSetup {
         }
 
         eprintln!("[plume] Model saved: {:?}", path);
+
+        // Verify download completed fully vs Content-Length
+        if total > 0 && downloaded != total {
+            let _ = std::fs::remove_file(&path);
+            return Err(format!("download incomplete: got {downloaded} of {total} bytes — connection may have been interrupted"));
+        }
+
+        // Verify GGUF header validity
+        if !self.validate_gguf(&path) {
+            let _ = std::fs::remove_file(&path);
+            return Err("downloaded file is not a valid GGUF model — the source URL may be wrong or the file is corrupt".into());
+        }
+
         Ok(path)
     }
 
@@ -299,11 +337,14 @@ impl LlamaSetup {
             .arg("127.0.0.1")
             .arg("-c")
             .arg("2048")
-            .arg("--no-warmup")
             .stdin(Stdio::null());
 
         if is_gpu_backend(backend) {
             cmd.arg("-ngl").arg("99");
+            cmd.arg("--no-mmap");
+            cmd.arg("--no-warmup");
+        } else {
+            cmd.arg("--no-warmup");
         }
 
         // Show logs in dev (npm run tauri dev), hide in production builds.
