@@ -18,6 +18,7 @@ interface Config {
   ai_suggestion_count: number;
   ai_suggestion_delay: number;
   hide_during_fullscreen: boolean;
+  auto_hide: boolean;
   window_opacity: number;
   compute_backend: string;
 }
@@ -191,6 +192,10 @@ root.innerHTML = `
         <input id="cfg-hide-fullscreen" type="checkbox" />
         <span>Hide during fullscreen / presentation (games, screen sharing)</span>
       </label>
+      <label class="cfg-field cfg-check">
+        <input id="cfg-auto-hide" type="checkbox" />
+        <span>Auto-hide window on idle</span>
+      </label>
       <label class="cfg-field">
         <span>Window Opacity (inactive)</span>
         <div style="display:flex;align-items:center;gap:8px;">
@@ -237,6 +242,7 @@ const cfgAiSuggestionCount = document.getElementById("cfg-ai-suggestion-count") 
 const cfgAiSuggestionDelay = document.getElementById("cfg-ai-suggestion-delay") as HTMLInputElement;
 const cfgIdleTimeout = document.getElementById("cfg-idle-timeout") as HTMLInputElement;
 const cfgHideFullscreen = document.getElementById("cfg-hide-fullscreen") as HTMLInputElement;
+const cfgAutoHide = document.getElementById("cfg-auto-hide") as HTMLInputElement;
 const cfgWindowOpacity = document.getElementById("cfg-window-opacity") as HTMLInputElement;
 const cfgWindowOpacityValue = document.getElementById("cfg-window-opacity-value") as HTMLSpanElement;
 const cfgComputeBackend = document.getElementById("cfg-compute-backend") as HTMLSelectElement;
@@ -434,6 +440,7 @@ async function loadConfig() {
   cfgAiSuggestionDelay.value = String(cfg.ai_suggestion_delay ?? 800);
   cfgIdleTimeout.value = String(cfg.idle_timeout ?? 6);
   cfgHideFullscreen.checked = !!cfg.hide_during_fullscreen;
+  cfgAutoHide.checked = cfg.auto_hide !== false;
   cfgWindowOpacity.value = String(cfg.window_opacity ?? 100);
   cfgWindowOpacityValue.textContent = cfgWindowOpacity.value + "%";
   cfgTrEnabled.checked = !!cfg.translation?.enabled;
@@ -544,6 +551,7 @@ modalSave.onclick = async () => {
     ai_suggestion_count: parseInt(cfgAiSuggestionCount.value) || 3,
     ai_suggestion_delay: parseInt(cfgAiSuggestionDelay.value) || 800,
     hide_during_fullscreen: cfgHideFullscreen.checked,
+    auto_hide: cfgAutoHide.checked,
     window_opacity: parseInt(cfgWindowOpacity.value) || 100,
     compute_backend: cfgComputeBackend.value,
   };

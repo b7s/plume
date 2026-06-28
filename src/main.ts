@@ -195,6 +195,7 @@ let aiSuggestionTimer: ReturnType<typeof setTimeout> | null = null;
 let aiSuggestionDelay = 800;
 
 let windowOpacity = 100;
+let autoHide = true;
 
 function applyOpacity() {
   const active = isHovering || overlayActivatable;
@@ -307,6 +308,7 @@ function scheduleHide() {
   if (idleTimer) {
     clearTimeout(idleTimer);
   }
+  if (!autoHide) return;
   const timeout = isHovering ? HOVER_TIMEOUT_MS : IDLE_MS;
   idleTimer = setTimeout(() => {
     isVisible = false;
@@ -579,9 +581,16 @@ listen<SuggestionPayload>("plume:suggestions", (evt) => {
 });
 
 listen<number>("plume:config-updated", async () => {
-  const cfg = await invoke<{ window_opacity: number }>("get_config");
+  const cfg = await invoke<{ window_opacity: number; auto_hide: boolean }>("get_config");
   if (typeof cfg.window_opacity === "number" && cfg.window_opacity >= 0 && cfg.window_opacity <= 100) {
     windowOpacity = cfg.window_opacity;
+  }
+  if (typeof cfg.auto_hide === "boolean") {
+    autoHide = cfg.auto_hide;
+  }
+  if (!autoHide && idleTimer) {
+    clearTimeout(idleTimer);
+    idleTimer = null;
   }
   applyOpacity();
 });
@@ -598,6 +607,7 @@ invoke<[number, boolean, string]>("on_overlay_ready").then(async ([idle, trEnabl
     hover_timeout_secs: number;
     window_opacity: number;
     hide_during_fullscreen: boolean;
+    auto_hide: boolean;
   }>("get_config");
   MIN_HEIGHT = cfg.window.min_height || 250;
   MAX_HEIGHT = cfg.window.max_height || 800;
@@ -615,6 +625,9 @@ invoke<[number, boolean, string]>("on_overlay_ready").then(async ([idle, trEnabl
   if (typeof cfg.window_opacity === "number" && cfg.window_opacity >= 0 && cfg.window_opacity <= 100) {
     windowOpacity = cfg.window_opacity;
     applyOpacity();
+  }
+  if (typeof cfg.auto_hide === "boolean") {
+    autoHide = cfg.auto_hide;
   }
 
   if (trEnabled) {

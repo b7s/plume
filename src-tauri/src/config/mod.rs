@@ -138,6 +138,8 @@ pub struct Config {
     pub hover_timeout_secs: u64,
     #[serde(default = "default_hide_during_fullscreen")]
     pub hide_during_fullscreen: bool,
+    #[serde(default = "default_auto_hide")]
+    pub auto_hide: bool,
     #[serde(default = "default_window_opacity")]
     pub window_opacity: u8,
     #[serde(default = "default_compute_backend")]
@@ -172,6 +174,8 @@ fn default_hover_timeout_secs() -> u64 { 30 }
 
 fn default_hide_during_fullscreen() -> bool { false }
 
+fn default_auto_hide() -> bool { true }
+
 fn default_window_opacity() -> u8 { 100 }
 
 fn default_compute_backend() -> String { "cpu".into() }
@@ -202,6 +206,7 @@ impl Default for Config {
             resize_debounce_ms: 250,
             hover_timeout_secs: 30,
             hide_during_fullscreen: false,
+            auto_hide: true,
             window_opacity: 100,
             compute_backend: "cpu".into(),
         }
