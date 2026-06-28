@@ -41,6 +41,9 @@ function render() {
     <div class="card" id="overlay">
       <div class="word-row" id="word-row">
         <span id="word-display"></span>
+        <button id="minimize-btn" class="settings-btn" title="Hide window">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" width="14" height="14"><path d="M3 8h10"/></svg>
+        </button>
         <button id="settings-btn" class="settings-btn" title="Settings">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M8 10.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z"/><path d="M13.5 8a5.5 5.5 0 0 0-.1-1l1.4-1.1-1.5-2.6-1.7.7a5.3 5.3 0 0 0-1.7-1l-.3-1.8h-3l-.3 1.8a5.3 5.3 0 0 0-1.7 1l-1.7-.7L1.4 5.9 2.8 7a5.5 5.5 0 0 0 0 2l-1.4 1.1 1.5 2.6 1.7-.7a5.3 5.3 0 0 0 1.7 1l.3 1.8h3l.3-1.8a5.3 5.3 0 0 0 1.7-1l1.7.7 1.5-2.6-1.4-1.1a5.5 5.5 0 0 0 .1-1z"/></svg>
         </button>
@@ -119,6 +122,7 @@ const trResultWrap = document.getElementById("tr-result-wrap")!;
 const trCopy = document.getElementById("tr-copy") as HTMLButtonElement;
 const trInsert = document.getElementById("tr-insert") as HTMLButtonElement;
 const settingsBtn = document.getElementById("settings-btn") as HTMLButtonElement;
+const minimizeBtn = document.getElementById("minimize-btn") as HTMLButtonElement;
 const trAction = document.getElementById("tr-action") as HTMLSelectElement;
 const trActionBtn = document.getElementById("tr-action-btn") as HTMLButtonElement;
 const trExplainBtn = document.getElementById("tr-explain-btn") as HTMLButtonElement;
@@ -534,6 +538,12 @@ trInsert.onclick = (e) => {
 settingsBtn.onclick = (e) => {
   e.stopPropagation();
   invoke("open_settings").catch((err) => console.error("open_settings failed:", err));
+};
+
+// Minimize — hides the overlay window
+minimizeBtn.onclick = (e) => {
+  e.stopPropagation();
+  hideOverlay();
 };
 
 // Save window geometry on move/resize
