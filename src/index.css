@@ -334,7 +334,7 @@ body {
 /* Translation result */
 .tr-result-wrap {
   position: relative;
-  margin: 0 4px;
+  margin: 0;
 }
 
 .tr-result-wrap.hidden {

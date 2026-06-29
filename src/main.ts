@@ -255,8 +255,7 @@ trText.addEventListener("blur", () => setOverlayActivatable(false));
 // so the background returns to the saved opacity/blur.
 win.listen("tauri://blur", () => {
   isHovering = false;
-  overlayActivatable = false;
-  applyOpacity();
+  setOverlayActivatable(false);
 });
 
 function autoResize() {
@@ -296,10 +295,10 @@ function showOverlay() {
     clearTimeout(idleTimer);
     idleTimer = null;
   }
-  // Reset interaction state so applyOpacity uses the saved opacity.
-  // mouseenter/focus will re-activate if the user interacts.
   isHovering = false;
-  overlayActivatable = false;
+  if (document.activeElement !== trText) {
+    setOverlayActivatable(false);
+  }
   if (!isVisible) {
     isVisible = true;
     win.show().catch(() => {});
@@ -317,7 +316,7 @@ function scheduleHide() {
   idleTimer = setTimeout(() => {
     isVisible = false;
     isHovering = false;
-    overlayActivatable = false;
+    setOverlayActivatable(false);
     win.hide().catch(() => {});
   }, timeout);
 }

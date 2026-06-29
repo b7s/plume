@@ -376,6 +376,7 @@ impl LlamaSetup {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn ensure_ready(
         app: &AppHandle,
         model_name: &str,
