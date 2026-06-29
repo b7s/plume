@@ -226,8 +226,8 @@ fn set_window_activatable(app: AppHandle, activatable: bool) {
             if let Ok(hwnd) = window.hwnd() {
                 use windows::Win32::UI::WindowsAndMessaging::{
                     GetWindowLongW, SetForegroundWindow, SetWindowLongW, SetWindowPos,
-                    GWL_EXSTYLE, SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
-                    WS_EX_NOACTIVATE,
+                    GWL_EXSTYLE, SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE, SWP_NOACTIVATE,
+                    SWP_NOZORDER, WS_EX_NOACTIVATE,
                 };
                 unsafe {
                     let ex = GetWindowLongW(hwnd, GWL_EXSTYLE);
@@ -237,7 +237,6 @@ fn set_window_activatable(app: AppHandle, activatable: bool) {
                         ex | (WS_EX_NOACTIVATE.0 as i32)
                     };
                     SetWindowLongW(hwnd, GWL_EXSTYLE, new_ex);
-                    // Flush the new extended style without moving/resizing.
                     let _ = SetWindowPos(
                         hwnd,
                         None,
@@ -245,7 +244,12 @@ fn set_window_activatable(app: AppHandle, activatable: bool) {
                         0,
                         0,
                         0,
-                        SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER,
+                        if activatable {
+                            SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER
+                        } else {
+                            SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER
+                                | SWP_NOACTIVATE
+                        },
                     );
                     if activatable {
                         let _ = SetForegroundWindow(hwnd);
@@ -803,7 +807,7 @@ fn set_no_activate(app: &tauri::App) {
     if let Some(window) = app.get_webview_window("plume") {
         if let Ok(hwnd) = window.hwnd() {
             use windows::Win32::UI::WindowsAndMessaging::{
-                GetWindowLongW, SetWindowLongW, SetWindowPos, SWP_FRAMECHANGED,
+                GetWindowLongW, SetWindowLongW, SetWindowPos, SWP_FRAMECHANGED, SWP_NOACTIVATE,
                 GWL_EXSTYLE, WS_EX_NOACTIVATE, WS_EX_TOPMOST,
             };
             unsafe {
@@ -813,7 +817,7 @@ fn set_no_activate(app: &tauri::App) {
                     GWL_EXSTYLE,
                     ex | (WS_EX_NOACTIVATE.0 | WS_EX_TOPMOST.0) as i32,
                 );
-                let _ = SetWindowPos(hwnd, None, 0, 0, 0, 0, SWP_FRAMECHANGED);
+                let _ = SetWindowPos(hwnd, None, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOACTIVATE);
             }
         }
     }
