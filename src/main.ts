@@ -53,54 +53,53 @@ function render() {
       <div class="tr-section hidden" id="tr-section">
         <div class="divider" id="divider"></div>
         <textarea id="tr-text" class="tr-text" placeholder="Type or auto-captured text will appear here…" rows="2"></textarea>
-        <div class="tr-toolbar" id="tr-toolbar">
-          <div class="tr-col">
-            <select id="tr-action" class="tr-action" title="AI action">
-              <option value="">Action…</option>
-              <option value="summarize">Summarize</option>
-              <option value="shorter">Make shorter</option>
-              <option value="longer">Make longer</option>
-              <option value="grammar">Correct grammar</option>
-              <optgroup label="Change tone">
-                <option value="tone:formal">Formal</option>
-                <option value="tone:casual">Casual</option>
-                <option value="tone:inspirational">Inspirational</option>
-                <option value="tone:humor">Humor</option>
-                <option value="tone:sarcastic">Sarcastic</option>
-              </optgroup>
-              <optgroup label="Format">
-                <option value="format:paragraph">Paragraph</option>
-                <option value="format:list">List</option>
-                <option value="format:business">Business</option>
-                <option value="format:academic">Academic</option>
-                <option value="format:marketing">Marketing</option>
-                <option value="format:poetry">Poetry</option>
-              </optgroup>
-            </select>
-            <button id="tr-action-btn" class="tr-btn" title="Execute action">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M2 8h10M9 5l3 3-3 3"/></svg>
-            </button>
-          </div>
-          <div class="tr-col tr-col-right">
-            <button id="tr-explain-btn" class="tr-btn" title="Explain this text">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M8 6v3M8 12h0"/><circle cx="8" cy="8" r="6"/><path d="M5 5s.5-2 3-2 3 2 2 3.5C9.5 8 8 8 8 9.5"/></svg>
-            </button>
-            <select id="tr-lang" class="tr-lang" title="Translate to"></select>
-            <button id="tr-btn" class="tr-btn" title="Translate">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M2 4h7M5 2v2M7.5 4S7 7 4 9.5M4.5 7c-.5 1.5-1.8 2.7-3 3.2M14 13c0-2-1.5-4.5-4-4.5S6 11 6 13s1.5 4.5 4 4.5 4-2.5 4-4.5z"/></svg>
-            </button>
-          </div>
-        </div>
         <div class="tr-result-wrap hidden" id="tr-result-wrap">
-          <button id="tr-copy" class="tr-copy" title="Copy translation">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" width="12" height="12"><rect x="2.5" y="3" width="11" height="11" rx="1.5"/><path d="M5.5 3v-1a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1"/></svg>
-          </button>
-          <button id="tr-insert" class="tr-copy" title="Insert text">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="12" height="12"><path d="M2 8h9M8 5l3 3-3 3"/><path d="M14 2v12"/></svg>
-          </button>
-          <div class="tr-result" id="tr-result"></div>
-        </div>
+        <button id="tr-copy" class="tr-copy" title="Copy translation">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" width="12" height="12"><rect x="2.5" y="3" width="11" height="11" rx="1.5"/><path d="M5.5 3v-1a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1"/></svg>
+        </button>
+        <button id="tr-insert" class="tr-copy" title="Insert text">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="12" height="12"><path d="M2 8h9M8 5l3 3-3 3"/><path d="M14 2v12"/></svg>
+        </button>
+        <div class="tr-result" id="tr-result"></div>
       </div>
+    </div>
+    <div class="tr-toolbar" id="tr-toolbar">
+        <div class="tr-col">
+          <select id="tr-action" class="tr-action" title="AI action">
+            <option value="">Action…</option>
+            <option value="summarize">Summarize</option>
+            <option value="shorter">Make shorter</option>
+            <option value="longer">Make longer</option>
+            <option value="grammar">Correct grammar</option>
+            <optgroup label="Change tone">
+              <option value="tone:formal">Formal</option>
+              <option value="tone:casual">Casual</option>
+              <option value="tone:inspirational">Inspirational</option>
+              <option value="tone:humor">Humor</option>
+              <option value="tone:sarcastic">Sarcastic</option>
+            </optgroup>
+            <optgroup label="Format">
+              <option value="format:paragraph">Paragraph</option>
+              <option value="format:list">List</option>
+              <option value="format:business">Business</option>
+              <option value="format:academic">Academic</option>
+              <option value="format:marketing">Marketing</option>
+              <option value="format:poetry">Poetry</option>
+            </optgroup>
+          </select>
+          <button id="tr-action-btn" class="tr-btn" title="Execute action">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M2 8h10M9 5l3 3-3 3"/></svg>
+          </button>
+        </div>
+        <div class="tr-col tr-col-right">
+          <button id="tr-explain-btn" class="tr-btn" title="Explain this text">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M8 6v3M8 12h0"/><circle cx="8" cy="8" r="6"/><path d="M5 5s.5-2 3-2 3 2 2 3.5C9.5 8 8 8 8 9.5"/></svg>
+          </button>
+          <select id="tr-lang" class="tr-lang" title="Translate to"></select>
+          <button id="tr-btn" class="tr-btn" title="Translate">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M2 4h7M5 2v2M7.5 4S7 7 4 9.5M4.5 7c-.5 1.5-1.8 2.7-3 3.2M14 13c0-2-1.5-4.5-4-4.5S6 11 6 13s1.5 4.5 4 4.5 4-2.5 4-4.5z"/></svg>
+          </button>
+        </div>
     </div>
   `;
 }

@@ -18,6 +18,7 @@ body {
 
 #root {
   height: 100%;
+  position: relative;
 }
 
 /* Card — the overlay container, also drag region */
@@ -25,11 +26,11 @@ body {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 10px 16px;
-  min-height: 100%;
-  max-height: 100%;
+  padding: 10px 16px 38px;
+  height: 100%;
   overflow-y: auto;
   scrollbar-width: thin;
+  background: inherit;
   -webkit-app-region: drag;
   app-region: drag;
   opacity: 1;
@@ -60,6 +61,7 @@ body {
 .tr-result-wrap,
 .tr-copy,
 .tr-action,
+.tr-toolbar,
 .tr-col,
 .settings-btn {
   -webkit-app-region: no-drag;
@@ -241,13 +243,24 @@ body {
   display: none;
 }
 
-/* Translation toolbar — two columns: left actions, right language */
+/* Translation toolbar — footer: two columns: left actions, right language */
 .tr-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 8px;
-  padding: 4px 0;
+  padding: 6px 16px;
+  background: inherit;
+  border-top: 1px solid rgba(128, 128, 128, 0.2);
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+}
+
+/* Hide toolbar when card has no tr-section visible */
+#root:not(:has(.tr-section:not(.hidden))) .tr-toolbar {
+  display: none;
 }
 
 .tr-col {
