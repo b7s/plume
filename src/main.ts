@@ -340,7 +340,7 @@ function makeChip(word: string, index: number, isAi = false): HTMLElement {
     btn.title = "AI suggestion";
   }
   btn.onclick = () => {
-    invoke("accept_text", { text: word }).catch(console.error);
+    invoke("accept_text", { text: word, replace: !isAi }).catch(console.error);
   };
   wrap.appendChild(btn);
 

@@ -244,6 +244,14 @@ fn handle_text(
             Err(_) => return,
         };
 
+        // If accept_text just modified the target text, reset throttle
+        // and dedup state so we immediately re-evaluate for new suggestions.
+        if crate::TEXT_ACCEPTED_FLAG.swap(false, Ordering::Relaxed) {
+            guard.last_word = String::new();
+            guard.last_fire = Instant::now() - Duration::from_secs(60);
+            guard.suppress = false;
+        }
+
         // Context switch: HWND changed → tab/app/link switch, not typing.
         if hwnd != guard.last_hwnd {
             guard.last_hwnd = hwnd;

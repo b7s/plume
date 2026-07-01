@@ -252,7 +252,7 @@ body {
   align-items: center;
   gap: 8px;
   padding: 6px 16px;
-  background: inherit;
+  background: rgba(36, 36, 36, 0.8);
   border-top: 1px solid rgba(128, 128, 128, 0.2);
   position: absolute;
   bottom: 0;

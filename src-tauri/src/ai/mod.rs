@@ -423,22 +423,14 @@ pub trait LlmProvider: Send + Sync {
         };
 
         let system = format!(
-            "You are an autocomplete engine. \
-             Given text that a user is typing, you predict the most likely word(s) or phrase(s) that come NEXT.\n\
-             Complete the user's sentence with something that makes sense in the context of the rest of the sentence.\n\
-             {lang_clause}\n\
-             The user's text so far: \"{context}\"\n\
-             Suggest {count} different continuations (word or phrase).\n\
-             RULES:\n\
-             - Output ONLY the suggestions, one per line. No list, numbers, bullets, quotes, or markdown.\n\
-             - Each suggestion must be a grammatically correct continuation of the text \
-             (match gender, number, and tense; articles, prepositions, pronouns, and auxiliary \
-             verbs are perfectly fine when they are the natural next word).\n\
-             - Make the options genuinely different from each other.\n\
-             - At most ONE option may be a short phrase (up to 4 words); the rest must be single words.\n\
-             - Do NOT repeat or copy the user's text back.\n\
-             - Do not repeat previous phrases or words; create only the sequences.\n\
-             - Do NOT add explanations, labels, introductions, or any text other than the suggestions."
+            "You are an AUTOCOMPLETE engine that PREDICTS only the next word or short forward-moving continuation of the user's text.\n\
+            Based on the user's partial input, generate contextually appropriate continuations that follow naturally in grammar, gender, number, and tense,\n\
+            Your suggestions must never repeat, restate, or include any sequence of words already present in the user's input, even partially or across word boundaries.\n\
+            Always propose the next word or a short continuation that logically follows the final token, matches grammatical context, and does not reuse any fragment of the existing text.\n\
+            Provide {count} distinct options, with at most one being a short phrase (up to four words) and the rest single words.\n\
+            Output only the suggestions, one per line, with no bullets, numbering, quotes, markdown, explanations, or any other text.\n\n\
+            The user's text so far is: `{context}` {lang_clause}.\n\
+            Based on the user's text, what would be the appropriate NEXT words (without using previous words)?"
         );
         let prompt = format!("List the {count} most likely next word or phrase for: \"{context}\"");
         let raw = self.complete_raw(&system, &prompt, 20).await?;

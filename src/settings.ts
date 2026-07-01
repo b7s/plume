@@ -218,7 +218,7 @@ root.innerHTML = `
         <span>Backdrop Effect</span>
         <select id="cfg-material" class="cfg-input">
           <option value="acrylic">Acrylic (dark tint + blur)</option>
-          <option value="mica">Blur (light tint)</option>
+          <option value="mica">Mica (light tint)</option>
           <option value="none">None</option>
         </select>
       </label>

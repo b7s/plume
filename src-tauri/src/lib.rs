@@ -9,7 +9,7 @@ mod state;
 
 use serde::Serialize;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{atomic::AtomicBool, Mutex};
 use std::time::Duration;
 use tauri::{
     AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, RunEvent, WebviewUrl,
@@ -54,13 +54,22 @@ pub struct AiSuggestionPayload {
 }
 
 fn replace_last_word(text: &str, replacement: &str) -> String {
-    if let Some(last_space) = text.rfind(|c: char| c.is_whitespace()) {
-        let mut result = text[..=last_space].to_string();
+    let trimmed = text.trim_end();
+    if let Some(last_space) = trimmed.rfind(|c: char| c.is_whitespace()) {
+        let mut result = trimmed[..=last_space].to_string();
         result.push_str(replacement);
         result
     } else {
         replacement.to_string()
     }
+}
+
+fn insert_text_after_last_word(text: &str, addition: &str) -> String {
+    let trimmed = text.trim_end();
+    let mut result = trimmed.to_string();
+    result.push(' ');
+    result.push_str(addition);
+    result
 }
 
 fn type_via_sendinput(text: &str, backspace: usize) -> bool {
@@ -124,6 +133,11 @@ fn send_ctrl_end() -> bool {
 /// uiautomation::Handle wraps *mut c_void and is !Send).
 static LAST_FOCUSED_HWND: Mutex<Option<isize>> = Mutex::new(None);
 
+/// Set to true by accept_text after it modifies target text.
+/// The capture loop checks this and resets its throttle/dedup state
+/// so new suggestions fire immediately on the next poll.
+pub static TEXT_ACCEPTED_FLAG: AtomicBool = AtomicBool::new(false);
+
 fn get_target_element(automation: &UIAutomation) -> Option<UIElement> {
     // Prefer the last-known-HWND from the capture thread.
     // When the user clicks a Plume chip, get_focused_element() may return
@@ -139,7 +153,7 @@ fn get_target_element(automation: &UIAutomation) -> Option<UIElement> {
     automation.get_focused_element().ok()
 }
 
-fn insert_via_uia(replacement: &str) -> bool {
+fn insert_via_uia(replacement: &str, replace_last: bool) -> bool {
     // CoInitializeEx is not called here because Tauri/WebView2 already
     // initializes COM on the main thread (as STA).  The uiautomation
     // crate's UIAutomation::new() calls CoInitializeEx(MTA) which
@@ -161,7 +175,11 @@ fn insert_via_uia(replacement: &str) -> bool {
     // Try ValuePattern (replaces last word at position)
     if let Ok(vp) = focused.get_pattern::<UIValuePattern>() {
         if let Ok(current) = vp.get_value() {
-            let new_text = replace_last_word(&current, replacement);
+            let new_text = if replace_last {
+                replace_last_word(&current, replacement)
+            } else {
+                insert_text_after_last_word(&current, replacement)
+            };
             if vp.set_value(&new_text).is_ok() {
                 eprintln!("[plume] ValuePattern success");
                 send_ctrl_end();
@@ -174,11 +192,15 @@ fn insert_via_uia(replacement: &str) -> bool {
     if let Ok(tp) = focused.get_pattern::<UITextPattern>() {
         if let Ok(doc_range) = tp.get_document_range() {
             if let Ok(text) = doc_range.get_text(-1) {
-                let word_len = text
-                    .split_whitespace()
-                    .last()
-                    .map(|w| w.len())
-                    .unwrap_or(0);
+                let trimmed = text.trim_end();
+                let word_len = if replace_last {
+                    trimmed.split_whitespace()
+                        .last()
+                        .map(|w| w.chars().count())
+                        .unwrap_or(0)
+                } else {
+                    0
+                };
                 eprintln!("[plume] TextPattern SendInput (backspace={})", word_len);
                 return type_via_sendinput(replacement, word_len);
             }
@@ -190,8 +212,13 @@ fn insert_via_uia(replacement: &str) -> bool {
 }
 
 #[tauri::command]
-fn accept_text(text: String) -> bool {
-    insert_via_uia(&format!("{text} "))
+fn accept_text(text: String, replace: Option<bool>) -> bool {
+    let do_replace = replace.unwrap_or(true);
+    let result = insert_via_uia(&format!("{text} "), do_replace);
+    if result {
+        TEXT_ACCEPTED_FLAG.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+    result
 }
 
 #[tauri::command]
