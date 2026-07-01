@@ -162,6 +162,19 @@ fn read_text(element: &UIElement) -> Option<String> {
         if value_pattern.is_readonly().unwrap_or(true) {
             return None;
         }
+        // Filter by control type — only accept actual text-entry controls.
+        // YouTube's video timer, media sliders, and similar non-text controls
+        // may expose a writable ValuePattern even though they are not inputs.
+        let ctrl_type = element.get_control_type().ok();
+        let is_text_input = matches!(
+            ctrl_type,
+            Some(ControlType::Edit)
+                | Some(ControlType::Document)
+                | Some(ControlType::ComboBox)
+        );
+        if !is_text_input {
+            return None;
+        }
         let text = value_pattern.get_value().ok()?;
         if !text.is_empty() {
             return Some(sanitize_text(&text));
