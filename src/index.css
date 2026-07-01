@@ -78,7 +78,6 @@ body {
 }
 
 .settings-btn {
-  margin-left: auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -94,6 +93,10 @@ body {
 .settings-btn:hover {
   opacity: 1;
   background: rgba(128, 128, 128, 0.12);
+}
+
+#minimize-btn {
+  margin-left: auto;
 }
 
 #word-display {

@@ -92,9 +92,6 @@ document.addEventListener("contextmenu", (e) => e.preventDefault());
 
 root.innerHTML = `
   <div class="settings">
-    <div class="settings-header">
-      <span class="settings-title">Settings</span>
-    </div>
     <div class="settings-tabs">
       <button class="tab active" data-tab="llm">LLM</button>
       <button class="tab" data-tab="spellcheck">Spellcheck</button>
