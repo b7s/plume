@@ -617,7 +617,7 @@ fn spawn_settings(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let window = match WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App("settings.html".into()))
             .title("Plume Settings")
-            .inner_size(400.0, 560.0)
+            .inner_size(500.0, 560.0)
             .min_inner_size(340.0, 420.0)
             .resizable(true)
             .maximizable(false)

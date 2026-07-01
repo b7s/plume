@@ -41,19 +41,46 @@ body {
   gap: 8px;
 }
 
-.cfg-section {
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  opacity: 0.5;
-  margin-top: 8px;
-  padding-bottom: 2px;
+.settings-tabs {
+  display: flex;
+  gap: 0;
   border-bottom: 1px solid rgba(128, 128, 128, 0.15);
+  padding: 0 16px;
 }
 
-.cfg-section:first-child {
-  margin-top: 0;
+.tab {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 8px 14px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.6;
+  border-bottom: 2px solid transparent;
+  transition: opacity 0.15s, border-color 0.15s;
+  margin-bottom: -1px;
+  color: inherit;
+}
+
+.tab:hover {
+  opacity: 0.8;
+}
+
+.tab.active {
+  opacity: 1;
+  border-bottom-color: #0078d4;
+}
+
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
 }
 
 .cfg-field {

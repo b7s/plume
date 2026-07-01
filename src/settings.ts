@@ -95,132 +95,144 @@ root.innerHTML = `
     <div class="settings-header">
       <span class="settings-title">Settings</span>
     </div>
+    <div class="settings-tabs">
+      <button class="tab active" data-tab="llm">LLM</button>
+      <button class="tab" data-tab="spellcheck">Spellcheck</button>
+      <button class="tab" data-tab="translation">Translation</button>
+      <button class="tab" data-tab="general">General</button>
+    </div>
     <div class="settings-body" id="settings-body">
-      <div class="cfg-section">LLM</div>
-      <label class="cfg-field">
-        <span>Provider</span>
-        <select id="cfg-provider" class="cfg-input">
-          <option value="local">Local (llama.cpp)</option>
-          <option value="ollama">Ollama</option>
-          <option value="openai">OpenAI-compatible</option>
-          <option value="custom">Custom API</option>
-        </select>
-      </label>
+      <div class="tab-content active" id="tab-llm">
+        <label class="cfg-field">
+          <span>Provider</span>
+          <select id="cfg-provider" class="cfg-input">
+            <option value="local">Local (llama.cpp)</option>
+            <option value="ollama">Ollama</option>
+            <option value="openai">OpenAI-compatible</option>
+            <option value="custom">Custom API</option>
+          </select>
+        </label>
 
-      <label class="cfg-field" data-provider="local">
-        <span>Model</span>
-        <select id="cfg-model-local" class="cfg-input"></select>
-        <input id="cfg-model-local-custom" class="cfg-input cfg-model-custom hidden" type="text" placeholder="Enter GGUF filename..." />
-      </label>
-      <label class="cfg-field" data-provider="local">
-        <span>Model URL</span>
-        <input id="cfg-model-url" class="cfg-input" type="text" placeholder="https://huggingface.co/..." />
-      </label>
-      <label class="cfg-field" data-provider="local">
-        <span>Port</span>
-        <input id="cfg-port" class="cfg-input" type="number" min="1" max="65535" placeholder="8080" />
-      </label>
-      <label class="cfg-field" data-provider="local">
-        <span>Endpoint</span>
-        <input id="cfg-endpoint-local" class="cfg-input" type="text" placeholder="http://127.0.0.1:8080" />
-      </label>
-      <label class="cfg-field" data-provider="local">
-        <span>Compute Device</span>
-        <select id="cfg-compute-backend" class="cfg-input"></select>
-        <span id="cfg-gpu-status" style="font-size:11px;opacity:0.6;display:none;"></span>
-      </label>
+        <label class="cfg-field" data-provider="local">
+          <span>Model</span>
+          <select id="cfg-model-local" class="cfg-input"></select>
+          <input id="cfg-model-local-custom" class="cfg-input cfg-model-custom hidden" type="text" placeholder="Enter GGUF filename..." />
+        </label>
+        <label class="cfg-field" data-provider="local">
+          <span>Model URL</span>
+          <input id="cfg-model-url" class="cfg-input" type="text" placeholder="https://huggingface.co/..." />
+        </label>
+        <label class="cfg-field" data-provider="local">
+          <span>Port</span>
+          <input id="cfg-port" class="cfg-input" type="number" min="1" max="65535" placeholder="8080" />
+        </label>
+        <label class="cfg-field" data-provider="local">
+          <span>Endpoint</span>
+          <input id="cfg-endpoint-local" class="cfg-input" type="text" placeholder="http://127.0.0.1:8080" />
+        </label>
+        <label class="cfg-field" data-provider="local">
+          <span>Compute Device</span>
+          <select id="cfg-compute-backend" class="cfg-input"></select>
+          <span id="cfg-gpu-status" style="font-size:11px;opacity:0.6;display:none;"></span>
+        </label>
 
-      <label class="cfg-field" data-provider="ollama">
-        <span>Model</span>
-        <select id="cfg-model-ollama" class="cfg-input"></select>
-        <input id="cfg-model-ollama-custom" class="cfg-input cfg-model-custom hidden" type="text" placeholder="Enter Ollama model name..." />
-      </label>
-      <label class="cfg-field" data-provider="ollama">
-        <span>Endpoint</span>
-        <input id="cfg-endpoint-ollama" class="cfg-input" type="text" placeholder="http://127.0.0.1:11434" />
-      </label>
+        <label class="cfg-field" data-provider="ollama">
+          <span>Model</span>
+          <select id="cfg-model-ollama" class="cfg-input"></select>
+          <input id="cfg-model-ollama-custom" class="cfg-input cfg-model-custom hidden" type="text" placeholder="Enter Ollama model name..." />
+        </label>
+        <label class="cfg-field" data-provider="ollama">
+          <span>Endpoint</span>
+          <input id="cfg-endpoint-ollama" class="cfg-input" type="text" placeholder="http://127.0.0.1:11434" />
+        </label>
 
-      <label class="cfg-field" data-provider="openai">
-        <span>Model</span>
-        <select id="cfg-model-openai" class="cfg-input"></select>
-        <input id="cfg-model-openai-custom" class="cfg-input cfg-model-custom hidden" type="text" placeholder="Enter model name..." />
-      </label>
-      <label class="cfg-field" data-provider="openai">
-        <span>API Key</span>
-        <input id="cfg-api-key" class="cfg-input" type="password" placeholder="sk-..." />
-      </label>
-      <label class="cfg-field" data-provider="openai">
-        <span>Endpoint (optional)</span>
-        <input id="cfg-endpoint-openai" class="cfg-input" type="text" placeholder="https://api.openai.com/v1/chat/completions" />
-      </label>
+        <label class="cfg-field" data-provider="openai">
+          <span>Model</span>
+          <select id="cfg-model-openai" class="cfg-input"></select>
+          <input id="cfg-model-openai-custom" class="cfg-input cfg-model-custom hidden" type="text" placeholder="Enter model name..." />
+        </label>
+        <label class="cfg-field" data-provider="openai">
+          <span>API Key</span>
+          <input id="cfg-api-key" class="cfg-input" type="password" placeholder="sk-..." />
+        </label>
+        <label class="cfg-field" data-provider="openai">
+          <span>Endpoint (optional)</span>
+          <input id="cfg-endpoint-openai" class="cfg-input" type="text" placeholder="https://api.openai.com/v1/chat/completions" />
+        </label>
 
-      <label class="cfg-field" data-provider="custom">
-        <span>API URL (required)</span>
-        <input id="cfg-endpoint-custom" class="cfg-input" type="text" placeholder="https://api.example.com/v1/chat/completions" />
-      </label>
-      <label class="cfg-field" data-provider="custom">
-        <span>Model</span>
-        <input id="cfg-model-custom-api" class="cfg-input" type="text" placeholder="model-name" />
-      </label>
-      <label class="cfg-field" data-provider="custom">
-        <span>Headers (JSON, optional)</span>
-        <input id="cfg-headers" class="cfg-input" type="text" placeholder='{"Authorization": "Bearer sk-..."}' />
-      </label>
+        <label class="cfg-field" data-provider="custom">
+          <span>API URL (required)</span>
+          <input id="cfg-endpoint-custom" class="cfg-input" type="text" placeholder="https://api.example.com/v1/chat/completions" />
+        </label>
+        <label class="cfg-field" data-provider="custom">
+          <span>Model</span>
+          <input id="cfg-model-custom-api" class="cfg-input" type="text" placeholder="model-name" />
+        </label>
+        <label class="cfg-field" data-provider="custom">
+          <span>Headers (JSON, optional)</span>
+          <input id="cfg-headers" class="cfg-input" type="text" placeholder='{"Authorization": "Bearer sk-..."}' />
+        </label>
+      </div>
 
-      <div class="cfg-section">Spellcheck</div>
-      <label class="cfg-field">
-        <span>Dictionary Language</span>
-        <select id="cfg-dict-lang" class="cfg-input"></select>
-      </label>
-      <label class="cfg-field">
-        <span>Suggestion Count</span>
-        <input id="cfg-suggestion-count" class="cfg-input" type="number" min="1" max="20" placeholder="6" />
-      </label>
-      <label class="cfg-field">
-        <span>AI Next-Word Count</span>
-        <input id="cfg-ai-suggestion-count" class="cfg-input" type="number" min="0" max="10" placeholder="2" />
-      </label>
-      <label class="cfg-field">
-        <span>AI Suggestion Delay (ms)</span>
-        <input id="cfg-ai-suggestion-delay" class="cfg-input" type="number" min="200" max="5000" step="100" placeholder="800" />
-      </label>
-      <label class="cfg-field">
-        <span>Idle Timeout (seconds)</span>
-        <input id="cfg-idle-timeout" class="cfg-input" type="number" min="1" max="60" placeholder="6" />
-      </label>
-      <div class="cfg-section">General</div>
-      <label class="cfg-field cfg-check">
-        <input id="cfg-hide-fullscreen" type="checkbox" />
-        <span>Hide during fullscreen / presentation (games, screen sharing)</span>
-      </label>
-      <label class="cfg-field cfg-check">
-        <input id="cfg-auto-hide" type="checkbox" />
-        <span>Auto-hide window on idle</span>
-      </label>
-      <label class="cfg-field">
-        <span>Window Effect</span>
-        <select id="cfg-material" class="cfg-input">
-          <option value="acrylic">Acrylic (blur + tint)</option>
-          <option value="mica">Blur</option>
-          <option value="none">None</option>
-        </select>
-      </label>
-      <label class="cfg-field">
-        <span>Window Opacity (inactive)</span>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <input type="range" min="10" max="100" value="100" class="cfg-input" id="cfg-window-opacity" style="flex:1" />
-          <span id="cfg-window-opacity-value" style="font-size:12px;min-width:28px;text-align:right;">100%</span>
-        </div>
-      </label>
-      <div class="cfg-section">Translation</div>
-      <label class="cfg-field cfg-check">
-        <input id="cfg-tr-enabled" type="checkbox" />
-        <span>Enable Translation</span>
-      </label>
-      <label class="cfg-field">
-        <span>Translation Language</span>
-        <select id="cfg-tr-lang" class="cfg-input"></select>
-      </label>
+      <div class="tab-content" id="tab-spellcheck">
+        <label class="cfg-field">
+          <span>Dictionary Language</span>
+          <select id="cfg-dict-lang" class="cfg-input"></select>
+        </label>
+        <label class="cfg-field">
+          <span>Suggestion Count</span>
+          <input id="cfg-suggestion-count" class="cfg-input" type="number" min="1" max="20" placeholder="6" />
+        </label>
+        <label class="cfg-field">
+          <span>AI Next-Word Count</span>
+          <input id="cfg-ai-suggestion-count" class="cfg-input" type="number" min="0" max="10" placeholder="2" />
+        </label>
+        <label class="cfg-field">
+          <span>AI Suggestion Delay (ms)</span>
+          <input id="cfg-ai-suggestion-delay" class="cfg-input" type="number" min="200" max="5000" step="100" placeholder="800" />
+        </label>
+        <label class="cfg-field">
+          <span>Idle Timeout (seconds)</span>
+          <input id="cfg-idle-timeout" class="cfg-input" type="number" min="1" max="60" placeholder="6" />
+        </label>
+      </div>
+
+      <div class="tab-content" id="tab-translation">
+        <label class="cfg-field cfg-check">
+          <input id="cfg-tr-enabled" type="checkbox" />
+          <span>Enable Translation</span>
+        </label>
+        <label class="cfg-field">
+          <span>Translation Language</span>
+          <select id="cfg-tr-lang" class="cfg-input"></select>
+        </label>
+      </div>
+
+      <div class="tab-content" id="tab-general">
+        <label class="cfg-field cfg-check">
+          <input id="cfg-hide-fullscreen" type="checkbox" />
+          <span>Hide during fullscreen / presentation (games, screen sharing)</span>
+        </label>
+        <label class="cfg-field cfg-check">
+          <input id="cfg-auto-hide" type="checkbox" />
+          <span>Auto-hide window on idle</span>
+        </label>
+        <label class="cfg-field">
+          <span>Window Effect</span>
+          <select id="cfg-material" class="cfg-input">
+            <option value="acrylic">Acrylic (blur + tint)</option>
+            <option value="mica">Blur</option>
+            <option value="none">None</option>
+          </select>
+        </label>
+        <label class="cfg-field">
+          <span>Window Opacity (inactive)</span>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <input type="range" min="10" max="100" value="100" class="cfg-input" id="cfg-window-opacity" style="flex:1" />
+            <span id="cfg-window-opacity-value" style="font-size:12px;min-width:28px;text-align:right;">100%</span>
+          </div>
+        </label>
+      </div>
     </div>
     <div class="settings-footer">
       <button id="modal-cancel" class="modal-btn modal-btn-secondary">Cancel</button>
@@ -531,6 +543,17 @@ async function handleLocalModelChange() {
 
 cfgModelLocal.addEventListener("change", handleLocalModelChange);
 cfgModelLocalCustom.addEventListener("blur", handleLocalModelChange);
+
+// Tab switching
+document.querySelectorAll(".tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+    document.querySelectorAll(".tab-content").forEach(tc => tc.classList.remove("active"));
+    tab.classList.add("active");
+    const tabContent = document.getElementById(`tab-${tab.dataset.tab}`);
+    if (tabContent) tabContent.classList.add("active");
+  });
+});
 
 modalCancel.onclick = async () => {
   await invoke("close_settings");
