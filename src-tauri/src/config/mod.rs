@@ -144,6 +144,8 @@ pub struct Config {
     pub window_opacity: u8,
     #[serde(default = "default_compute_backend")]
     pub compute_backend: String,
+    #[serde(default = "default_material")]
+    pub material: String,
 }
 
 fn default_port() -> u16 { 8080 }
@@ -176,9 +178,11 @@ fn default_hide_during_fullscreen() -> bool { false }
 
 fn default_auto_hide() -> bool { true }
 
-fn default_window_opacity() -> u8 { 100 }
+fn default_window_opacity() -> u8 { 15 }
 
 fn default_compute_backend() -> String { "cpu".into() }
+
+fn default_material() -> String { "mica".into() }
 
 impl Default for Config {
     fn default() -> Self {
@@ -209,6 +213,7 @@ impl Default for Config {
             auto_hide: true,
             window_opacity: 100,
             compute_backend: "cpu".into(),
+            material: "mica".into(),
         }
     }
 }

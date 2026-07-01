@@ -436,6 +436,7 @@ async fn download_model(app: AppHandle, model_name: String, model_url: String) -
 #[tauri::command]
 fn save_config(app: AppHandle, config: config::Config) -> bool {
     config::save_config(&config);
+    apply_window_effects(&app, &config.material);
     app.emit("plume:config-updated", config.window_opacity).ok();
     if let Some(main_win) = app.get_webview_window("main") {
         let js = format!("windowOpacity = {}; applyOpacity();", config.window_opacity);
@@ -695,6 +696,7 @@ pub fn run() {
             check_model,
             download_model,
             restart_llama,
+            set_window_effects,
         ])
         .setup(|app| {
             #[cfg(target_os = "windows")]
@@ -703,12 +705,6 @@ pub fn run() {
             // WS_EX_NOACTIVATE — clicking Plume never steals focus from the user's app.
             #[cfg(target_os = "windows")]
             set_no_activate(app);
-
-            // Poll cursor position vs window bounds every 200ms to detect
-            // mouse enter/leave reliably (DOM events are unreliable in
-            // WebView2 + transparent windows).
-            #[cfg(target_os = "windows")]
-            start_mouse_tracker(app.handle().clone());
 
             let quit =
                 tauri::menu::MenuItem::with_id(app, "quit", "Quit Plume", true, None::<&str>)?;
@@ -766,6 +762,9 @@ pub fn run() {
             watch_theme_changes(app.handle().clone());
 
             let cfg = config::load();
+
+            // Apply blur/acrylic backdrop effect behind the transparent window
+            apply_window_effects(app.handle(), &cfg.material);
 
             // Initialize spellcheck dictionary
             {
@@ -832,50 +831,6 @@ pub fn run() {
     });
 }
 
-/// Polls cursor position against the plume window bounds every 200ms and
-/// emits `plume:mouse-enter` / `plume:mouse-leave` so the front-end can
-/// reliably detect hover state (DOM events are unreliable in WebView2 +
-/// transparent windows).
-#[cfg(target_os = "windows")]
-fn start_mouse_tracker(app: AppHandle) {
-    std::thread::spawn(move || {
-        use windows::Win32::Foundation::{POINT, RECT};
-        use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, GetWindowRect};
-
-        let mut was_inside = true;
-        let zero = POINT::default();
-        loop {
-            std::thread::sleep(Duration::from_millis(600));
-
-            let Some(window) = app.get_webview_window("plume") else {
-                continue;
-            };
-            let Ok(hwnd) = window.hwnd() else {
-                continue;
-            };
-
-            let inside = unsafe {
-                let mut pt = zero;
-                let mut rect = RECT::default();
-                if GetCursorPos(&mut pt).is_ok() && GetWindowRect(hwnd, &mut rect).is_ok() {
-                    pt.x >= rect.left && pt.x < rect.right
-                        && pt.y >= rect.top && pt.y < rect.bottom
-                } else {
-                    was_inside
-                }
-            };
-
-            if inside != was_inside {
-                was_inside = inside;
-                let _ = app.emit(
-                    if inside { "plume:mouse-enter" } else { "plume:mouse-leave" },
-                    (),
-                );
-            }
-        }
-    });
-}
-
 #[cfg(target_os = "windows")]
 fn set_no_activate(app: &tauri::App) {
     if let Some(window) = app.get_webview_window("plume") {
@@ -916,6 +871,89 @@ fn force_window_corners_round(app: &tauri::App) {
             }
         }
     }
+}
+
+/// Apply per-pixel alpha blur behind the window via the undocumented
+/// `SetWindowCompositionAttribute` (user32.dll) — the same API that YASB
+/// and many modern Windows overlays use. Works with `WS_EX_LAYERED` so it
+/// pairs correctly with Tauri's `transparent: true`.
+///
+/// - `"acrylic"` → `ACCENT_ENABLE_ACRYLICBLURBEHIND` (state 4) — full blur
+/// - `"mica"`    → `ACCENT_ENABLE_BLURBEHIND` (state 3) — simpler blur
+/// - `"none"`    → disables the accent (state 0)
+#[cfg(target_os = "windows")]
+fn apply_window_effects(app: &AppHandle, material: &str) {
+    #[repr(C)]
+    struct ACCENT_POLICY {
+        accent_state: u32,
+        accent_flags: u32,
+        gradient_color: u32,
+        animation_id: u32,
+    }
+
+    #[repr(C)]
+    struct WINDOWCOMPOSITIONATTRIBDATA {
+        attribute: u32,
+        data: *mut ACCENT_POLICY,
+        size_of_data: u32,
+    }
+
+    const WCA_ACCENT_POLICY: u32 = 19;
+    const ACCENT_DISABLED: u32 = 0;
+    const ACCENT_ENABLE_BLURBEHIND: u32 = 3;
+    const ACCENT_ENABLE_ACRYLICBLURBEHIND: u32 = 4;
+
+    let Some(window) = app.get_webview_window("plume") else { return };
+    let Ok(raw_hwnd) = window.hwnd() else { return };
+
+    let accent_state = match material {
+        "acrylic" => ACCENT_ENABLE_ACRYLICBLURBEHIND,
+        "mica" => ACCENT_ENABLE_BLURBEHIND,
+        _ => ACCENT_DISABLED,
+    };
+
+    unsafe {
+        use std::mem::transmute;
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryA};
+
+        let Ok(module) = LoadLibraryA(windows::core::s!("user32.dll")) else { return };
+
+        // Dynamically load the undocumented SetWindowCompositionAttribute.
+        let addr = GetProcAddress(module, windows::core::s!("SetWindowCompositionAttribute"));
+
+        type SWCA = unsafe extern "system" fn(HWND, *mut WINDOWCOMPOSITIONATTRIBDATA) -> i32;
+        let func: SWCA = transmute(addr);
+
+        let mut accent = ACCENT_POLICY {
+            accent_state,
+            accent_flags: 0,
+            gradient_color: if accent_state != ACCENT_DISABLED {
+                0x01202020 // subtle dark tint (AABBGGRR)
+            } else {
+                0
+            },
+            animation_id: 0,
+        };
+
+        let mut data = WINDOWCOMPOSITIONATTRIBDATA {
+            attribute: WCA_ACCENT_POLICY,
+            data: &mut accent,
+            size_of_data: std::mem::size_of::<ACCENT_POLICY>() as u32,
+        };
+
+        func(raw_hwnd, &mut data);
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn apply_window_effects(_app: &AppHandle, _material: &str) {}
+
+/// Apply the backdrop effect from the current config.
+#[tauri::command]
+fn set_window_effects(app: AppHandle) {
+    let cfg = config::load();
+    apply_window_effects(&app, &cfg.material);
 }
 
 // ========== Theme-aware tray icon ==========

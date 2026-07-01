@@ -180,7 +180,6 @@ const win = getCurrentWindow();
 
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let isVisible = false;
-let isHovering = false;
 let userEditedText = false;
 let initialized = false;
 
@@ -190,7 +189,6 @@ let MAX_HEIGHT = 800;
 let MIN_WIDTH = 400;
 let MAX_WIDTH = 800;
 let RESIZE_DEBOUNCE_MS = 250;
-let HOVER_TIMEOUT_MS = 30_000;
 
 // AI next-word suggestions
 let aiSuggestionTimer: ReturnType<typeof setTimeout> | null = null;
@@ -200,32 +198,14 @@ let windowOpacity = 100;
 let autoHide = true;
 
 function applyOpacity() {
-  const active = isHovering || overlayActivatable;
-  const val = active ? 1 : windowOpacity / 100;
+  const val = windowOpacity / 100;
   const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
   const r = isDark ? 25 : 245;
   const g = isDark ? 25 : 245;
   const b = isDark ? 25 : 245;
   document.body.style.background = `rgba(${r}, ${g}, ${b}, ${val})`;
-  invoke("set_window_opacity", { opacity: active ? 100 : windowOpacity }).catch(() => {});
+  invoke("set_window_opacity", { opacity: windowOpacity }).catch(() => {});
 }
-
-// Rust-side cursor tracker polls every 200ms and emits these events
-// (DOM mouse events are unreliable in WebView2 + transparent windows).
-listen("plume:mouse-enter", () => {
-  isHovering = true;
-  applyOpacity();
-  if (isVisible) {
-    scheduleHide();
-  }
-});
-listen("plume:mouse-leave", () => {
-  isHovering = false;
-  applyOpacity();
-  if (isVisible) {
-    scheduleHide();
-  }
-});
 
 // Track when user manually edits the textarea
 let resizeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -245,25 +225,18 @@ function setOverlayActivatable(v: boolean) {
   if (overlayActivatable === v) return;
   overlayActivatable = v;
   invoke("set_window_activatable", { activatable: v }).catch(() => {});
-  applyOpacity();
 }
 trText.addEventListener("pointerdown", () => setOverlayActivatable(true));
 trText.addEventListener("focus", () => setOverlayActivatable(true));
 trText.addEventListener("blur", () => setOverlayActivatable(false));
 
-// When the window loses focus (click outside), reset interaction state
-// so the background returns to the saved opacity/blur.
+// When the window loses focus, restore WS_EX_NOACTIVATE so the
+// textarea no longer captures keyboard input.
 win.listen("tauri://blur", () => {
-  isHovering = false;
   setOverlayActivatable(false);
-  applyOpacity();
 });
-// Fallback: DOM blur fires reliably even with focusable: false,
-// catching Alt+Tab or clicking another app while hovering.
 window.addEventListener("blur", () => {
-  isHovering = false;
   setOverlayActivatable(false);
-  applyOpacity();
 });
 
 function autoResize() {
@@ -303,7 +276,6 @@ function showOverlay() {
     clearTimeout(idleTimer);
     idleTimer = null;
   }
-  isHovering = false;
   if (document.activeElement !== trText) {
     setOverlayActivatable(false);
   }
@@ -320,13 +292,11 @@ function scheduleHide() {
     clearTimeout(idleTimer);
   }
   if (!autoHide) return;
-  const timeout = isHovering ? HOVER_TIMEOUT_MS : IDLE_MS;
   idleTimer = setTimeout(() => {
     isVisible = false;
-    isHovering = false;
     setOverlayActivatable(false);
     win.hide().catch(() => {});
-  }, timeout);
+  }, IDLE_MS);
 }
 
 function hideOverlay() {
@@ -335,7 +305,6 @@ function hideOverlay() {
     idleTimer = null;
   }
   isVisible = false;
-  isHovering = false;
   setOverlayActivatable(false);
   win.hide().catch(() => {});
 }
@@ -621,7 +590,6 @@ invoke<[number, boolean, string]>("on_overlay_ready").then(async ([idle, trEnabl
     window: { min_height: number; max_height: number; min_width: number; max_width: number };
     ai_suggestion_delay: number;
     resize_debounce_ms: number;
-    hover_timeout_secs: number;
     window_opacity: number;
     hide_during_fullscreen: boolean;
     auto_hide: boolean;
@@ -635,9 +603,6 @@ invoke<[number, boolean, string]>("on_overlay_ready").then(async ([idle, trEnabl
   }
   if (cfg.resize_debounce_ms) {
     RESIZE_DEBOUNCE_MS = cfg.resize_debounce_ms;
-  }
-  if (cfg.hover_timeout_secs) {
-    HOVER_TIMEOUT_MS = cfg.hover_timeout_secs * 1000;
   }
   if (typeof cfg.window_opacity === "number" && cfg.window_opacity >= 0 && cfg.window_opacity <= 100) {
     windowOpacity = cfg.window_opacity;

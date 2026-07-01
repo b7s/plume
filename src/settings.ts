@@ -21,6 +21,7 @@ interface Config {
   auto_hide: boolean;
   window_opacity: number;
   compute_backend: string;
+  material: string;
 }
 
 interface GpuInfo {
@@ -197,6 +198,14 @@ root.innerHTML = `
         <span>Auto-hide window on idle</span>
       </label>
       <label class="cfg-field">
+        <span>Window Effect</span>
+        <select id="cfg-material" class="cfg-input">
+          <option value="acrylic">Acrylic (blur + tint)</option>
+          <option value="mica">Blur</option>
+          <option value="none">None</option>
+        </select>
+      </label>
+      <label class="cfg-field">
         <span>Window Opacity (inactive)</span>
         <div style="display:flex;align-items:center;gap:8px;">
           <input type="range" min="10" max="100" value="100" class="cfg-input" id="cfg-window-opacity" style="flex:1" />
@@ -245,6 +254,7 @@ const cfgHideFullscreen = document.getElementById("cfg-hide-fullscreen") as HTML
 const cfgAutoHide = document.getElementById("cfg-auto-hide") as HTMLInputElement;
 const cfgWindowOpacity = document.getElementById("cfg-window-opacity") as HTMLInputElement;
 const cfgWindowOpacityValue = document.getElementById("cfg-window-opacity-value") as HTMLSpanElement;
+const cfgMaterial = document.getElementById("cfg-material") as HTMLSelectElement;
 const cfgComputeBackend = document.getElementById("cfg-compute-backend") as HTMLSelectElement;
 const cfgGpuStatus = document.getElementById("cfg-gpu-status") as HTMLSpanElement;
 const cfgTrEnabled = document.getElementById("cfg-tr-enabled") as HTMLInputElement;
@@ -443,6 +453,7 @@ async function loadConfig() {
   cfgAutoHide.checked = cfg.auto_hide !== false;
   cfgWindowOpacity.value = String(cfg.window_opacity ?? 100);
   cfgWindowOpacityValue.textContent = cfgWindowOpacity.value + "%";
+  cfgMaterial.value = cfg.material || "mica";
   cfgTrEnabled.checked = !!cfg.translation?.enabled;
   cfgTrLang.value = cfg.translation?.language || "portuguese";
 
@@ -554,6 +565,7 @@ modalSave.onclick = async () => {
     auto_hide: cfgAutoHide.checked,
     window_opacity: parseInt(cfgWindowOpacity.value) || 100,
     compute_backend: cfgComputeBackend.value,
+    material: cfgMaterial.value,
   };
 
   try {
