@@ -211,7 +211,11 @@ function applyOpacity() {
 let resizeTimer: ReturnType<typeof setTimeout> | null = null;
 let lastTargetHeight = -1;
 trText.addEventListener("input", () => {
-  userEditedText = true;
+  if (trText.value === "") {
+    userEditedText = false;
+  } else {
+    userEditedText = true;
+  }
   autoResize();
 });
 
