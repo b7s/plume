@@ -97,6 +97,7 @@ root.innerHTML = `
       <button class="tab" data-tab="spellcheck">Spellcheck</button>
       <button class="tab" data-tab="translation">Translation</button>
       <button class="tab" data-tab="general">General</button>
+      <button class="tab" data-tab="about">About</button>
     </div>
     <div class="settings-body" id="settings-body">
       <div class="tab-content active" id="tab-llm">
@@ -229,6 +230,21 @@ root.innerHTML = `
             <span id="cfg-window-opacity-value" style="font-size:12px;min-width:28px;text-align:right;">100%</span>
           </div>
         </label>
+      </div>
+
+      <div class="tab-content" id="tab-about">
+        <div class="about-logo">
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="/app-icon-dark.png">
+            <source media="(prefers-color-scheme: light)" srcset="/app-icon-light.png">
+            <img alt="Plume" src="/app-icon-light.png" width="80" height="80" />
+          </picture>
+        </div>
+        <div class="about-title">Plume</div>
+        <div class="about-version">v0.1.2</div>
+        <div class="about-desc">Floating typing assistant for Windows.</div>
+        <a class="about-link" href="https://github.com/b7s/plume" target="_blank">github.com/b7s/plume</a>
+        <div class="about-license">License: MIT</div>
       </div>
     </div>
     <div class="settings-footer">
