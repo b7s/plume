@@ -704,6 +704,12 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             set_no_activate(app);
 
+            // Poll cursor position vs window bounds every 200ms to detect
+            // mouse enter/leave reliably (DOM events are unreliable in
+            // WebView2 + transparent windows).
+            #[cfg(target_os = "windows")]
+            start_mouse_tracker(app.handle().clone());
+
             let quit =
                 tauri::menu::MenuItem::with_id(app, "quit", "Quit Plume", true, None::<&str>)?;
             let settings_item =
@@ -822,6 +828,50 @@ pub fn run() {
     app.run(|_app_handle, event| {
         if let RunEvent::Exit = event {
             cleanup_llama();
+        }
+    });
+}
+
+/// Polls cursor position against the plume window bounds every 200ms and
+/// emits `plume:mouse-enter` / `plume:mouse-leave` so the front-end can
+/// reliably detect hover state (DOM events are unreliable in WebView2 +
+/// transparent windows).
+#[cfg(target_os = "windows")]
+fn start_mouse_tracker(app: AppHandle) {
+    std::thread::spawn(move || {
+        use windows::Win32::Foundation::{POINT, RECT};
+        use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, GetWindowRect};
+
+        let mut was_inside = true;
+        let zero = POINT::default();
+        loop {
+            std::thread::sleep(Duration::from_millis(600));
+
+            let Some(window) = app.get_webview_window("plume") else {
+                continue;
+            };
+            let Ok(hwnd) = window.hwnd() else {
+                continue;
+            };
+
+            let inside = unsafe {
+                let mut pt = zero;
+                let mut rect = RECT::default();
+                if GetCursorPos(&mut pt).is_ok() && GetWindowRect(hwnd, &mut rect).is_ok() {
+                    pt.x >= rect.left && pt.x < rect.right
+                        && pt.y >= rect.top && pt.y < rect.bottom
+                } else {
+                    was_inside
+                }
+            };
+
+            if inside != was_inside {
+                was_inside = inside;
+                let _ = app.emit(
+                    if inside { "plume:mouse-enter" } else { "plume:mouse-leave" },
+                    (),
+                );
+            }
         }
     });
 }

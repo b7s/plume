@@ -51,7 +51,6 @@ function render() {
       <div class="chips-row" id="chips"></div>
       <span id="ai-loading" class="ai-loading hidden">✨</span>
       <div class="tr-section hidden" id="tr-section">
-        <div class="divider" id="divider"></div>
         <textarea id="tr-text" class="tr-text" placeholder="Type or auto-captured text will appear here…" rows="2"></textarea>
         <div class="tr-result-wrap hidden" id="tr-result-wrap">
         <button id="tr-copy" class="tr-copy" title="Copy translation">
@@ -211,14 +210,16 @@ function applyOpacity() {
   invoke("set_window_opacity", { opacity: active ? 100 : windowOpacity }).catch(() => {});
 }
 
-document.body.addEventListener("mouseenter", () => {
+// Rust-side cursor tracker polls every 200ms and emits these events
+// (DOM mouse events are unreliable in WebView2 + transparent windows).
+listen("plume:mouse-enter", () => {
   isHovering = true;
   applyOpacity();
   if (isVisible) {
     scheduleHide();
   }
 });
-document.body.addEventListener("mouseleave", () => {
+listen("plume:mouse-leave", () => {
   isHovering = false;
   applyOpacity();
   if (isVisible) {
@@ -255,6 +256,14 @@ trText.addEventListener("blur", () => setOverlayActivatable(false));
 win.listen("tauri://blur", () => {
   isHovering = false;
   setOverlayActivatable(false);
+  applyOpacity();
+});
+// Fallback: DOM blur fires reliably even with focusable: false,
+// catching Alt+Tab or clicking another app while hovering.
+window.addEventListener("blur", () => {
+  isHovering = false;
+  setOverlayActivatable(false);
+  applyOpacity();
 });
 
 function autoResize() {

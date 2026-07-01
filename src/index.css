@@ -112,7 +112,6 @@ body {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  padding-left: 4px;
 }
 
 /* Chip wrapper — word + separator + copy button */
