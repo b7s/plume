@@ -65,7 +65,7 @@ function render() {
             <span class="win-icon win-icon--14">&#xE713;</span>
           </button>
           <select id="tr-action" class="tr-action" title="AI action">
-            <option value="">Action…</option>
+            <option value="" disabled selected>Action…</option>
             <option value="summarize">Summarize</option>
             <option value="shorter">Make shorter</option>
             <option value="longer">Make longer</option>
@@ -91,12 +91,9 @@ function render() {
           </button>
         </div>
         <div class="tr-col tr-col-right">
-          <button id="tr-explain-btn" class="tr-btn" title="Explain this text">
-            <span class="win-icon win-icon--14">&#xE946;</span>
-          </button>
           <select id="tr-lang" class="tr-lang" title="Translate to"></select>
           <button id="tr-btn" class="tr-btn" title="Translate">
-            <span class="win-icon win-icon--14">&#xE753;</span>
+            <span class="win-icon win-icon--14">&#xE768;</span>
           </button>
         </div>
     </div>
@@ -123,7 +120,6 @@ const settingsBtn = document.getElementById("settings-btn") as HTMLButtonElement
 const minimizeBtn = document.getElementById("minimize-btn") as HTMLButtonElement;
 const trAction = document.getElementById("tr-action") as HTMLSelectElement;
 const trActionBtn = document.getElementById("tr-action-btn") as HTMLButtonElement;
-const trExplainBtn = document.getElementById("tr-explain-btn") as HTMLButtonElement;
 const aiLoading = document.getElementById("ai-loading")!;
 
 // Populate language select
@@ -233,6 +229,18 @@ function setOverlayActivatable(v: boolean) {
 trText.addEventListener("pointerdown", () => setOverlayActivatable(true));
 trText.addEventListener("focus", () => setOverlayActivatable(true));
 trText.addEventListener("blur", () => setOverlayActivatable(false));
+
+trText.addEventListener("keydown", (e) => {
+  if (!e.ctrlKey || e.key !== "Enter") return;
+  e.preventDefault();
+  if (e.shiftKey) {
+    const action = trAction.value;
+    if (!action) return;
+    trActionBtn.click();
+  } else {
+    trBtn.click();
+  }
+});
 
 // When the window loses focus, restore WS_EX_NOACTIVATE so the
 // textarea no longer captures keyboard input.
@@ -467,15 +475,6 @@ trBtn.onclick = async () => {
   if (!text) return;
   await runLLM("Translating…", () =>
     invoke<string>("translate_text", { text, language: trLang.value })
-  );
-};
-
-// Explain
-trExplainBtn.onclick = async () => {
-  const text = trText.value.trim();
-  if (!text) return;
-  await runLLM("Explaining…", () =>
-    invoke<string>("explain_text", { text })
   );
 };
 

@@ -277,16 +277,6 @@ pub trait LlmProvider: Send + Sync {
         self.complete_raw(&system, &prompt, 300).await
     }
 
-    async fn explain_text(&self, text: &str) -> Result<String, String> {
-        let system = "You are an expert explainer. \
-                      The user sends you text and you explain what it means in simple terms. \
-                      Explain in the SAME language as the original text — do NOT translate. \
-                      Output ONLY the explanation — no thinking, no repetition of the original."
-            .to_string();
-        let prompt = format!("Explain this text:\n\n{text}\n\nExplanation:");
-        self.complete_raw(&system, &prompt, 400).await
-    }
-
     async fn process_text(&self, text: &str, action: &str) -> Result<String, String> {
         let (system, prompt) = match action {
             "summarize" => (
