@@ -12,7 +12,8 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{
-    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, RunEvent, WindowEvent,
+    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, RunEvent, WebviewUrl,
+    WebviewWindowBuilder, WindowEvent,
 };
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_clipboard_manager::ClipboardExt;
@@ -611,22 +612,46 @@ async fn try_start_and_wait(
         .map_err(|e| format!("server didn't become ready ({backend}): {e}"))
 }
 
+fn spawn_settings(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        let window = match WebviewWindowBuilder::new(&app, "settings", WebviewUrl::App("settings.html".into()))
+            .title("Plume Settings")
+            .inner_size(400.0, 560.0)
+            .min_inner_size(340.0, 420.0)
+            .resizable(true)
+            .maximizable(false)
+            .minimizable(false)
+            .decorations(true)
+            .shadow(true)
+            .center()
+            .build()
+        {
+            Ok(w) => w,
+            Err(e) => {
+                eprintln!("[plume] settings window creation failed: {e}");
+                return;
+            }
+        };
+        let _ = window.show();
+        let _ = window.set_focus();
+    });
+}
+
 #[tauri::command]
 fn open_settings(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("settings") {
         window.show().map_err(|e| format!("show failed: {e}"))?;
         window.set_focus().map_err(|e| format!("focus failed: {e}"))?;
-        let _ = window.eval("modalSave.disabled = false; modalSave.textContent = 'Save'; loadConfig();");
-        Ok(())
-    } else {
-        Err("settings window not found".into())
+        return Ok(());
     }
+    spawn_settings(app);
+    Ok(())
 }
 
 #[tauri::command]
 fn close_settings(app: AppHandle) {
     if let Some(window) = app.get_webview_window("settings") {
-        let _ = window.hide();
+        let _ = window.destroy();
     }
 }
 
@@ -707,10 +732,7 @@ pub fn run() {
                         }
                     }
                     "settings" => {
-                        if let Some(window) = app.get_webview_window("settings") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
+                        spawn_settings(app.clone());
                     }
                     _ => {}
                 })
@@ -786,8 +808,10 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
+                if window.label() == "plume" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
             }
         });
 
