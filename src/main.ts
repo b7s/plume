@@ -42,7 +42,7 @@ function render() {
       <div class="word-row" id="word-row">
         <span id="word-display"></span>
         <button id="minimize-btn" class="settings-btn" title="Hide window">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" width="14" height="14"><path d="M3 8h10"/></svg>
+          <span class="win-icon win-icon--14">&#xE921;</span>
         </button>
       </div>
       <div class="chips-row" id="chips"></div>
@@ -51,10 +51,10 @@ function render() {
         <textarea id="tr-text" class="tr-text" placeholder="Type or auto-captured text will appear here…" rows="2"></textarea>
         <div class="tr-result-wrap hidden" id="tr-result-wrap">
         <button id="tr-copy" class="tr-copy" title="Copy translation">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" width="12" height="12"><rect x="2.5" y="3" width="11" height="11" rx="1.5"/><path d="M5.5 3v-1a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1"/></svg>
+          <span class="win-icon win-icon--12">&#xE8C8;</span>
         </button>
         <button id="tr-insert" class="tr-copy" title="Insert text">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="12" height="12"><path d="M2 8h9M8 5l3 3-3 3"/><path d="M14 2v12"/></svg>
+          <span class="win-icon win-icon--12">&#xE77F;</span>
         </button>
         <div class="tr-result" id="tr-result"></div>
       </div>
@@ -62,7 +62,7 @@ function render() {
     <div class="tr-toolbar" id="tr-toolbar">
         <div class="tr-col">
           <button id="settings-btn" class="settings-btn" title="Settings">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M8 10.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z"/><path d="M13.5 8a5.5 5.5 0 0 0-.1-1l1.4-1.1-1.5-2.6-1.7.7a5.3 5.3 0 0 0-1.7-1l-.3-1.8h-3l-.3 1.8a5.3 5.3 0 0 0-1.7 1l-1.7-.7L1.4 5.9 2.8 7a5.5 5.5 0 0 0 0 2l-1.4 1.1 1.5 2.6 1.7-.7a5.3 5.3 0 0 0 1.7 1l.3 1.8h3l.3-1.8a5.3 5.3 0 0 0 1.7-1l1.7.7 1.5-2.6-1.4-1.1a5.5 5.5 0 0 0 .1-1z"/></svg>
+            <span class="win-icon win-icon--14">&#xE713;</span>
           </button>
           <select id="tr-action" class="tr-action" title="AI action">
             <option value="">Action…</option>
@@ -87,16 +87,16 @@ function render() {
             </optgroup>
           </select>
           <button id="tr-action-btn" class="tr-btn" title="Execute action">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" width="14" height="14"><path d="M5 3l8 5-8 5z"/></svg>
+            <span class="win-icon win-icon--14">&#xE768;</span>
           </button>
         </div>
         <div class="tr-col tr-col-right">
           <button id="tr-explain-btn" class="tr-btn" title="Explain this text">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M8 6v3M8 12h0"/><circle cx="8" cy="8" r="6"/><path d="M5 5s.5-2 3-2 3 2 2 3.5C9.5 8 8 8 8 9.5"/></svg>
+            <span class="win-icon win-icon--14">&#xE946;</span>
           </button>
           <select id="tr-lang" class="tr-lang" title="Translate to"></select>
           <button id="tr-btn" class="tr-btn" title="Translate">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M2 4h7M5 2v2M7.5 4S7 7 4 9.5M4.5 7c-.5 1.5-1.8 2.7-3 3.2M14 13c0-2-1.5-4.5-4-4.5S6 11 6 13s1.5 4.5 4 4.5 4-2.5 4-4.5z"/></svg>
+            <span class="win-icon win-icon--14">&#xE753;</span>
           </button>
         </div>
     </div>
@@ -351,15 +351,15 @@ function makeChip(word: string, index: number, isAi = false): HTMLElement {
   const copyBtn = document.createElement("button");
   copyBtn.className = "chip-copy";
   copyBtn.title = "Copy to clipboard";
-  copyBtn.innerHTML = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" width="12" height="12"><rect x="2.5" y="3" width="11" height="11" rx="1.5"/><path d="M5.5 3v-1a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1"/></svg>`;
-  const okSvg = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12"><path d="M3 8l3 3 7-7"/></svg>`;
+  copyBtn.innerHTML = `<span class="win-icon win-icon--12">&#xE8C8;</span>`;
+  const okIcon = `<span class="win-icon win-icon--12">&#xE73E;</span>`;
   copyBtn.onclick = (e) => {
     e.stopPropagation();
     invoke("copy_text", { text: word }).catch(console.error);
-    copyBtn.innerHTML = okSvg;
+    copyBtn.innerHTML = okIcon;
     copyBtn.classList.add("copied");
     setTimeout(() => {
-      copyBtn.innerHTML = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" width="12" height="12"><rect x="2.5" y="3" width="11" height="11" rx="1.5"/><path d="M5.5 3v-1a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1"/></svg>`;
+      copyBtn.innerHTML = `<span class="win-icon win-icon--12">&#xE8C8;</span>`;
       copyBtn.classList.remove("copied");
     }, 1200);
   };
@@ -492,11 +492,11 @@ trCopy.onclick = (e) => {
   const text = trResult.textContent;
   if (!text) return;
   invoke("copy_text", { text }).catch(console.error);
-  const okSvg = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12"><path d="M3 8l3 3 7-7"/></svg>`;
-  trCopy.innerHTML = okSvg;
+  const okIcon = `<span class="win-icon win-icon--12">&#xE73E;</span>`;
+  trCopy.innerHTML = okIcon;
   trCopy.classList.add("copied");
   setTimeout(() => {
-    trCopy.innerHTML = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" width="12" height="12"><rect x="2.5" y="3" width="11" height="11" rx="1.5"/><path d="M5.5 3v-1a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1"/></svg>`;
+    trCopy.innerHTML = `<span class="win-icon win-icon--12">&#xE8C8;</span>`;
     trCopy.classList.remove("copied");
   }, 1200);
 };

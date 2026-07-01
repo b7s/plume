@@ -251,9 +251,8 @@ body {
   justify-content: space-between;
   align-items: center;
   gap: 8px;
-  padding: 6px 16px;
-  background: rgba(36, 36, 36, 0.8);
-  border-top: 1px solid rgba(128, 128, 128, 0.2);
+  padding: 6px;
+  background: rgba(36, 36, 36, 0.2);
   position: absolute;
   bottom: 0;
   left: 0;
@@ -438,6 +437,21 @@ body {
 
 .tr-action:focus {
   border-color: rgba(128, 128, 128, 0.4);
+}
+
+/* Windows-native icon font */
+.win-icon {
+  font-family: "Segoe MDL2 Assets", system-ui, sans-serif;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.win-icon--14 {
+  font-size: 14px;
+}
+.win-icon--12 {
+  font-size: 12px;
 }
 
 /* ========== LIGHT THEME ========== */
