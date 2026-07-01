@@ -900,16 +900,18 @@ fn apply_window_effects(app: &AppHandle, material: &str) {
 
     const WCA_ACCENT_POLICY: u32 = 19;
     const ACCENT_DISABLED: u32 = 0;
-    const ACCENT_ENABLE_BLURBEHIND: u32 = 3;
     const ACCENT_ENABLE_ACRYLICBLURBEHIND: u32 = 4;
 
     let Some(window) = app.get_webview_window("plume") else { return };
     let Ok(raw_hwnd) = window.hwnd() else { return };
 
-    let accent_state = match material {
-        "acrylic" => ACCENT_ENABLE_ACRYLICBLURBEHIND,
-        "mica" => ACCENT_ENABLE_BLURBEHIND,
-        _ => ACCENT_DISABLED,
+    // Gradient color format: AABBGGRR
+    // Acrylic (state 4) applies a tint layer over the blur — using a stronger
+    // dark alpha ensures the overlay always looks dark even on white backgrounds.
+    let (accent_state, gradient_color) = match material {
+        "acrylic" => (ACCENT_ENABLE_ACRYLICBLURBEHIND, 0x991A1A1A),
+        "mica"    => (ACCENT_ENABLE_ACRYLICBLURBEHIND, 0x661A1A1A),
+        _         => (ACCENT_DISABLED, 0u32),
     };
 
     unsafe {
@@ -919,7 +921,6 @@ fn apply_window_effects(app: &AppHandle, material: &str) {
 
         let Ok(module) = LoadLibraryA(windows::core::s!("user32.dll")) else { return };
 
-        // Dynamically load the undocumented SetWindowCompositionAttribute.
         let addr = GetProcAddress(module, windows::core::s!("SetWindowCompositionAttribute"));
 
         type SWCA = unsafe extern "system" fn(HWND, *mut WINDOWCOMPOSITIONATTRIBDATA) -> i32;
@@ -928,11 +929,7 @@ fn apply_window_effects(app: &AppHandle, material: &str) {
         let mut accent = ACCENT_POLICY {
             accent_state,
             accent_flags: 0,
-            gradient_color: if accent_state != ACCENT_DISABLED {
-                0x01202020 // subtle dark tint (AABBGGRR)
-            } else {
-                0
-            },
+            gradient_color,
             animation_id: 0,
         };
 

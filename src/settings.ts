@@ -217,14 +217,14 @@ root.innerHTML = `
           <input id="cfg-auto-hide" type="checkbox" />
           <span>Auto-hide window on idle</span>
         </label>
-        <label class="cfg-field">
-          <span>Window Effect</span>
-          <select id="cfg-material" class="cfg-input">
-            <option value="acrylic">Acrylic (blur + tint)</option>
-            <option value="mica">Blur</option>
-            <option value="none">None</option>
-          </select>
-        </label>
+      <label class="cfg-field">
+        <span>Backdrop Effect</span>
+        <select id="cfg-material" class="cfg-input">
+          <option value="acrylic">Acrylic (dark tint + blur)</option>
+          <option value="mica">Blur (light tint)</option>
+          <option value="none">None</option>
+        </select>
+      </label>
         <label class="cfg-field">
           <span>Window Opacity (inactive)</span>
           <div style="display:flex;align-items:center;gap:8px;">
@@ -550,7 +550,7 @@ document.querySelectorAll(".tab").forEach(tab => {
     document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
     document.querySelectorAll(".tab-content").forEach(tc => tc.classList.remove("active"));
     tab.classList.add("active");
-    const tabContent = document.getElementById(`tab-${tab.dataset.tab}`);
+    const tabContent = document.getElementById(`tab-${(tab as HTMLElement).dataset.tab}`);
     if (tabContent) tabContent.classList.add("active");
   });
 });
