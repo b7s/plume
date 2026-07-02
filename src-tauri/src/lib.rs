@@ -922,10 +922,23 @@ fn apply_window_effects(app: &AppHandle, material: &str) {
     // Gradient color format: AABBGGRR
     // Acrylic (state 4) applies a tint layer over the blur — using a stronger
     // dark alpha ensures the overlay always looks dark even on white backgrounds.
+    let is_light = !is_dark_mode();
     let (accent_state, gradient_color) = match material {
-        "acrylic" => (ACCENT_ENABLE_ACRYLICBLURBEHIND, 0x991A1A1A),
-        "mica"    => (ACCENT_ENABLE_ACRYLICBLURBEHIND, 0x661A1A1A),
-        _         => (ACCENT_DISABLED, 0u32),
+        "acrylic" => {
+            if is_light {
+                (ACCENT_ENABLE_ACRYLICBLURBEHIND, 0x99F3F3F3)
+            } else {
+                (ACCENT_ENABLE_ACRYLICBLURBEHIND, 0x991A1A1A)
+            }
+        }
+        "mica" => {
+            if is_light {
+                (ACCENT_ENABLE_ACRYLICBLURBEHIND, 0x66F3F3F3)
+            } else {
+                (ACCENT_ENABLE_ACRYLICBLURBEHIND, 0x661A1A1A)
+            }
+        }
+        _ => (ACCENT_DISABLED, 0u32),
     };
 
     unsafe {
@@ -1020,6 +1033,8 @@ fn watch_theme_changes(app: AppHandle) {
                 if let Some(tray) = app.tray_by_id("plume-tray") {
                     let _ = tray.set_icon(Some(icon));
                 }
+                let cfg = config::load();
+                apply_window_effects(&app, &cfg.material);
             }
         }
     });
