@@ -1,4 +1,5 @@
 import "./settings.css";
+import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 
@@ -241,7 +242,7 @@ root.innerHTML = `
           </picture>
         </div>
         <div class="about-title">Plume</div>
-        <div class="about-version">v0.1.2</div>
+        <div class="about-version" id="about-version"></div>
         <div class="about-desc">Floating typing assistant for Windows.</div>
         <a class="about-link" href="https://github.com/b7s/plume" target="_blank">github.com/b7s/plume</a>
         <div class="about-license">License: MIT</div>
@@ -507,6 +508,11 @@ async function loadConfig() {
     cfgGpuStatus.style.display = "";
   } else {
     cfgGpuStatus.style.display = "none";
+  }
+
+  const aboutVersion = document.getElementById("about-version");
+  if (aboutVersion) {
+    aboutVersion.textContent = `v${await getVersion()}`;
   }
 
   updateGpuModelHint();
