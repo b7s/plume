@@ -905,6 +905,7 @@ fn apply_window_effects(app: &AppHandle, material: &str) {
     }
 
     #[repr(C)]
+    #[allow(clippy::upper_case_acronyms)]
     struct WINDOWCOMPOSITIONATTRIBDATA {
         attribute: u32,
         data: *mut ACCENT_POLICY,
@@ -936,6 +937,7 @@ fn apply_window_effects(app: &AppHandle, material: &str) {
 
         let addr = GetProcAddress(module, windows::core::s!("SetWindowCompositionAttribute"));
 
+        #[allow(clippy::upper_case_acronyms)]
         type SWCA = unsafe extern "system" fn(HWND, *mut WINDOWCOMPOSITIONATTRIBDATA) -> i32;
         let func: SWCA = transmute(addr);
 
