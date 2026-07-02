@@ -39,11 +39,7 @@ The overlay stays on top of all windows, auto-hides after a configurable idle ti
 
 ### Install
 
-```
-winget install b7s.Plume
-```
-
-Or download the latest `.exe` installer from [Releases](https://github.com/b7s/plume/releases).
+Download the latest `.exe` installer from [Releases](https://github.com/b7s/plume/releases).
 
 ### First Run
 
